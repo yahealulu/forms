@@ -68,8 +68,10 @@ export function FileField({ question, name, control }: FileFieldProps) {
             fileId: uploaded.fileId,
             fileName: uploaded.fileName,
           });
-        } catch {
-          toast.error("تعذّر رفع الملف.", { description: file.name });
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "تعذّر رفع الملف.";
+          toast.error(message, { description: file.name });
         }
       }
       if (accepted.length > 0) {

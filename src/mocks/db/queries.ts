@@ -352,14 +352,19 @@ export function getFile(fileId: string) {
   return db.files.get(fileId) ?? null;
 }
 
-/** Create a form response. */
+/**
+ * Create a form response.
+ * Returns `null` if the form is missing.
+ * Returns `"unpublished"` if the form exists but is not published.
+ */
 export function createResponse(
   formId: string,
   data: Partial<FormResponse>
-): FormResponse | null {
+): FormResponse | null | "unpublished" {
   ensureDb();
   const form = db.forms.get(formId);
   if (!form) return null;
+  if (form.status !== "published") return "unpublished";
   const id = uuid();
   const response: FormResponse = {
     id,

@@ -37,13 +37,16 @@ import { SubmitSuccessAnimation } from "./SubmitSuccessAnimation";
 
 export interface FormFillerViewProps {
   formId: string;
+  /** admin = builder preview (drafts OK). public = share link (published only). */
+  mode?: "admin" | "public";
 }
 
-export function FormFillerView({ formId }: FormFillerViewProps) {
+export function FormFillerView({ formId, mode = "admin" }: FormFillerViewProps) {
   const { data: form, isLoading, isError } = useFormDefinition(formId);
   const submitMutation = useSubmitFormResponse(formId);
   const [submitted, setSubmitted] = useState(false);
   const setView = useUIStore((s) => s.setView);
+  const isPublic = mode === "public";
 
   // The dynamic Zod schema for this form.
   const schema = useDynamicFormSchema(form);
@@ -74,28 +77,38 @@ export function FormFillerView({ formId }: FormFillerViewProps) {
     );
   }
 
-  // Not-found / unavailable state (allow preview of drafts from the builder)
-  if (isError || !form || form.status === "archived") {
+  // Not-found / unavailable: public blocks draft+archived; admin preview allows drafts
+  const isUnavailable =
+    isError ||
+    !form ||
+    form.status === "archived" ||
+    (isPublic && form.status !== "published");
+
+  if (isUnavailable) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6">
+      <div className="flex min-h-screen flex-1 items-center justify-center p-6">
         <Alert className="max-w-md border-destructive/30 bg-card">
           <AlertCircle className="text-destructive" />
           <AlertTitle className="text-foreground font-semibold">
-            تعذّر فتح الاستمارة
+            {isPublic ? "النموذج غير متاح" : "تعذّر فتح الاستمارة"}
           </AlertTitle>
           <AlertDescription className="text-muted-foreground">
-            النموذج غير موجود أو لم يعد متاحاً.
+            {isPublic
+              ? "هذا النموذج غير منشور أو لم يعد متاحاً للتعبئة."
+              : "النموذج غير موجود أو لم يعد متاحاً."}
           </AlertDescription>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-4 w-fit"
-            onClick={() => setView({ name: "dashboard" })}
-          >
-            <ArrowRight className="size-4 rtl-flip" />
-            العودة للوحة التحكم
-          </Button>
+          {!isPublic && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-4 w-fit"
+              onClick={() => setView({ name: "dashboard" })}
+            >
+              <ArrowRight className="size-4 rtl-flip" />
+              العودة للوحة التحكم
+            </Button>
+          )}
         </Alert>
       </div>
     );
@@ -155,7 +168,10 @@ export function FormFillerView({ formId }: FormFillerViewProps) {
 
         {/* Success overlay */}
         {submitted && (
-          <SubmitSuccessAnimation onDismiss={() => setSubmitted(false)} />
+          <SubmitSuccessAnimation
+            mode={mode}
+            onDismiss={() => setSubmitted(false)}
+          />
         )}
       </div>
     </FormProvider>

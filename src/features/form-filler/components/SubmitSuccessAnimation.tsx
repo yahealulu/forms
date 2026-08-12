@@ -10,6 +10,8 @@ import { motionTokens } from "@/styles/design-tokens";
 export interface SubmitSuccessAnimationProps {
   /** Called when the user dismisses the overlay. */
   onDismiss?: () => void;
+  /** Public fill: dismiss only. Admin preview: return to dashboard. */
+  mode?: "admin" | "public";
 }
 
 /**
@@ -22,7 +24,10 @@ export interface SubmitSuccessAnimationProps {
  *
  * Uses `gsap.context()` for safe cleanup on unmount.
  */
-export function SubmitSuccessAnimation({ onDismiss }: SubmitSuccessAnimationProps) {
+export function SubmitSuccessAnimation({
+  onDismiss,
+  mode = "admin",
+}: SubmitSuccessAnimationProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const circleRef = useRef<SVGCircleElement>(null);
   const checkRef = useRef<SVGPathElement>(null);
@@ -100,10 +105,13 @@ export function SubmitSuccessAnimation({ onDismiss }: SubmitSuccessAnimationProp
   }, []);
 
   const setView = useUIStore((s) => s.setView);
+  const isPublic = mode === "public";
 
   const handleReturn = () => {
     onDismiss?.();
-    setView({ name: "dashboard" });
+    if (!isPublic) {
+      setView({ name: "dashboard" });
+    }
   };
 
   return (
@@ -181,7 +189,7 @@ export function SubmitSuccessAnimation({ onDismiss }: SubmitSuccessAnimationProp
             onClick={handleReturn}
             className="bg-gold-gradient text-white hover:opacity-90 shadow-sm"
           >
-            العودة للوحة التحكم
+            {isPublic ? "إغلاق" : "العودة للوحة التحكم"}
           </Button>
         </div>
       </div>

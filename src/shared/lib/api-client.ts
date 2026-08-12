@@ -20,12 +20,29 @@ async function request<T>(
   url: string,
   options?: RequestInit
 ): Promise<T> {
+  const isFormData =
+    typeof FormData !== "undefined" && options?.body instanceof FormData;
+
+  // Let the browser set multipart boundary for FormData — never force JSON.
+  const headers: Record<string, string> = {};
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (options?.headers) {
+    const extra = new Headers(options.headers);
+    extra.forEach((value, key) => {
+      headers[key] = value;
+    });
+  }
+  // FormData must not carry Content-Type (boundary is required).
+  if (isFormData) {
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  }
+
   const res = await fetch(url, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
+    headers,
   });
 
   const data = await res.json().catch(() => ({}));
@@ -48,5 +65,5 @@ export const api = {
   delete: <T>(url: string, body?: unknown) =>
     request<T>(url, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
   upload: <T>(url: string, formData: FormData) =>
-    request<T>(url, { method: "POST", body: formData, headers: {} }),
+    request<T>(url, { method: "POST", body: formData }),
 };

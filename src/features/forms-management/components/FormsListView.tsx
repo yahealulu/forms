@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   FileEdit,
   Inbox,
+  Link2,
+  Copy,
 } from "lucide-react";
 import { useForms, useCreateForm, useDeleteForm } from "../hooks/useForms";
 import { useUIStore } from "@/stores/useUIStore";
@@ -53,6 +55,7 @@ import { toast } from "sonner";
 import type { Form } from "@/shared/types";
 import { cn } from "@/lib/utils";
 import { BrandLoader } from "@/shared/components/BrandLoader";
+import { copyPublicFormUrl } from "@/shared/lib/public-form-url";
 
 const statusLabels: Record<Form["status"], { label: string; variant: "default" | "secondary" | "outline" }> = {
   published: { label: "منشور", variant: "default" },
@@ -194,6 +197,16 @@ function FormCard({
     month: "short",
     day: "numeric",
   });
+  const isPublished = form.status === "published";
+
+  const handleCopyLink = async () => {
+    try {
+      await copyPublicFormUrl(form.id);
+      toast.success("تم نسخ رابط النموذج");
+    } catch {
+      toast.error("تعذّر نسخ الرابط");
+    }
+  };
 
   return (
     <motion.div
@@ -207,16 +220,21 @@ function FormCard({
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gold/10 text-gold-dark">
               <FileText className="size-5" />
             </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-foreground truncate text-base leading-tight">
+            <div className="min-w-0 flex-1">
+              <h3
+                className="font-semibold text-foreground text-base leading-snug break-words line-clamp-3"
+                title={form.title}
+              >
                 {form.title}
               </h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{form.entityName}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 break-words line-clamp-1">
+                {form.entityName}
+              </p>
             </div>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8 shrink-0">
+              <Button variant="ghost" size="icon" className="size-8 shrink-0" aria-label="المزيد">
                 <MoreVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -230,6 +248,11 @@ function FormCard({
               <DropdownMenuItem onClick={onOpenResponses} className="gap-2">
                 <ListChecks className="size-4" /> عرض الاستجابات
               </DropdownMenuItem>
+              {isPublished && (
+                <DropdownMenuItem onClick={handleCopyLink} className="gap-2">
+                  <Link2 className="size-4" /> نسخ الرابط
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={onDelete}
@@ -259,17 +282,31 @@ function FormCard({
           </Badge>
         </div>
 
-        <div className="flex items-center justify-between pt-3 border-t border-border">
-          <span className="text-[11px] text-muted-foreground">آخر تحديث: {updated}</span>
-          <Button
-            size="sm"
-            variant="default"
-            onClick={onOpenBuilder}
-            className="gap-1.5"
-          >
-            <Pencil className="size-3.5" />
-            تحرير
-          </Button>
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
+          <span className="text-[11px] text-muted-foreground shrink-0">آخر تحديث: {updated}</span>
+          <div className="flex items-center gap-1.5">
+            {isPublished && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCopyLink}
+                className="gap-1.5 min-h-9"
+                aria-label="نسخ رابط النموذج المنشور"
+              >
+                <Copy className="size-3.5" />
+                نسخ الرابط
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="default"
+              onClick={onOpenBuilder}
+              className="gap-1.5 min-h-9"
+            >
+              <Pencil className="size-3.5" />
+              تحرير
+            </Button>
+          </div>
         </div>
       </Card>
     </motion.div>

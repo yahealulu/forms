@@ -186,7 +186,7 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
               (e.target as HTMLInputElement).blur();
             }
           }}
-          className="flex-1 h-8 min-w-0 font-semibold text-base border-transparent hover:border-input focus-visible:border-input bg-transparent"
+          className="flex-1 h-9 min-w-[8rem] font-semibold text-base md:text-base border-transparent hover:border-input focus-visible:border-input bg-transparent"
           placeholder="عنوان القسم"
         />
 
@@ -196,8 +196,8 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 shrink-0 cursor-default">
-              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            <div className="flex items-center gap-2.5 shrink-0 cursor-default">
+              <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
                 قابل للتكرار
               </span>
               <Switch

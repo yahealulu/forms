@@ -195,15 +195,15 @@ export function QuestionEditor({ formId, question, index }: QuestionEditorProps)
                 }
               }}
               placeholder="اكتب نص السؤال هنا..."
-              className="flex-1 h-8 min-w-0 font-medium"
+              className="flex-1 h-9 min-w-[8rem] font-medium text-sm md:text-base"
             />
 
-            {/* Required toggle */}
-            <div className="flex items-center gap-1.5 shrink-0 ps-1">
+            {/* Required toggle — gap keeps label clear of thumb */}
+            <div className="flex items-center shrink-0 ps-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 cursor-default">
-                    <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                  <div className="flex items-center gap-2.5 cursor-default">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
                       إلزامي
                     </span>
                     <Switch
@@ -366,9 +366,13 @@ function FileUploadConfig({ formId, question, open }: ConfigPanelProps) {
   if (!open) return null;
 
   const commit = () => {
+    // Store as `.ext` so validation matches file.name extensions.
     const list = exts
       .split(",")
-      .map((s) => s.trim().replace(/^\./, "").toLowerCase())
+      .map((s) => {
+        const cleaned = s.trim().replace(/^\./, "").toLowerCase();
+        return cleaned ? `.${cleaned}` : "";
+      })
       .filter(Boolean);
     updateQuestion.mutate({
       questionId: question.id,

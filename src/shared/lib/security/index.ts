@@ -61,6 +61,7 @@ const FILE_SIGNATURES: Record<string, number[]> = {
   pdf: [0x25, 0x50, 0x44, 0x46],
   png: [0x89, 0x50, 0x4e, 0x47],
   jpg: [0xff, 0xd8, 0xff],
+  jpeg: [0xff, 0xd8, 0xff],
   gif: [0x47, 0x49, 0x46, 0x38],
   webp: [0x52, 0x49, 0x46, 0x46],
   docx: [0x50, 0x4b, 0x03, 0x04],
@@ -73,6 +74,13 @@ export interface FileValidationResult {
   detectedType?: string;
 }
 
+/** Normalize extension to `.ext` lowercase (accepts `pdf` or `.pdf`). */
+function normalizeExt(ext: string): string {
+  const trimmed = ext.trim().toLowerCase();
+  if (!trimmed) return "";
+  return trimmed.startsWith(".") ? trimmed : `.${trimmed}`;
+}
+
 /**
  * Validate an uploaded file: extension, magic bytes, and size.
  * Executable extensions are always rejected.
@@ -82,7 +90,8 @@ export function validateFile(
   allowedExtensions?: string[],
   maxFileSizeMB?: number
 ): FileValidationResult {
-  const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+  const rawExt = (file.name.split(".").pop() || "").toLowerCase();
+  const ext = normalizeExt(rawExt);
 
   // 1. Always reject forbidden executable extensions
   if (FORBIDDEN_EXTENSIONS.includes(ext)) {
@@ -92,12 +101,18 @@ export function validateFile(
     };
   }
 
-  // 2. Check against allowed extensions if provided
+  // 2. Check against allowed extensions if provided (tolerate missing dots)
   if (allowedExtensions && allowedExtensions.length > 0) {
-    if (!allowedExtensions.includes(ext)) {
+    const allowed = allowedExtensions.map(normalizeExt).filter(Boolean);
+    const aliases =
+      ext === ".jpg" || ext === ".jpeg"
+        ? [".jpg", ".jpeg"]
+        : [ext];
+    const ok = aliases.some((a) => allowed.includes(a));
+    if (!ok) {
       return {
         valid: false,
-        error: `الامتدادات المسموح بها: ${allowedExtensions.join("، ")}`,
+        error: `الامتدادات المسموح بها: ${allowed.join("، ")}`,
       };
     }
   }

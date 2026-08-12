@@ -23,6 +23,7 @@ import {
   Inbox,
   Layers,
   ListChecks,
+  Link2,
   Plus,
   Rocket,
   Save,
@@ -60,6 +61,7 @@ import {
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import type { Form, FormStatus } from "@/shared/types";
+import { copyPublicFormUrl } from "@/shared/lib/public-form-url";
 
 interface FormBuilderViewProps {
   formId: string;
@@ -170,6 +172,15 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
     );
   };
 
+  const handleCopyPublicLink = async () => {
+    try {
+      await copyPublicFormUrl(formId);
+      toast.success("تم نسخ رابط النموذج");
+    } catch {
+      toast.error("تعذّر نسخ الرابط");
+    }
+  };
+
   const handlePublish = () => {
     if (!form) return;
     if (form.sections.length === 0) {
@@ -184,7 +195,16 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
     updateForm.mutate(
       { status: "published" },
       {
-        onSuccess: () => toast.success("تم نشر النموذج بنجاح"),
+        onSuccess: () => {
+          toast.success("تم نشر النموذج بنجاح", {
+            action: {
+              label: "نسخ الرابط",
+              onClick: () => {
+                void handleCopyPublicLink();
+              },
+            },
+          });
+        },
         onError: (e) => toast.error(e.message || "تعذّر نشر النموذج"),
       }
     );
@@ -273,8 +293,9 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                       (e.target as HTMLInputElement).blur();
                     }
                   }}
-                  className="flex-1 min-w-0 max-w-md h-9 font-semibold text-base border-transparent hover:border-input focus-visible:border-input bg-transparent px-2"
+                  className="flex-1 min-w-[12rem] sm:min-w-[16rem] max-w-2xl h-10 font-semibold text-base md:text-lg leading-snug border-transparent hover:border-input focus-visible:border-input bg-transparent px-3"
                   placeholder="عنوان النموذج"
+                  aria-label="عنوان النموذج"
                 />
 
                 <Badge className={`shrink-0 gap-1 ${status.className}`}>
@@ -334,6 +355,26 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                         : "نشر النموذج لتلقي الاستجابات"}
                     </TooltipContent>
                   </Tooltip>
+
+                  {form.status === "published" && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCopyPublicLink}
+                          className="gap-1.5 min-h-9"
+                          aria-label="نسخ رابط النموذج المنشور"
+                        >
+                          <Link2 className="size-4 text-gold-dark" />
+                          <span className="hidden sm:inline">نسخ الرابط</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        نسخ رابط التعبئة العام
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </div>
             </div>

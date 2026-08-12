@@ -33,8 +33,14 @@ export async function POST(
     );
   }
   const response = createResponse(formId, body);
-  if (!response) {
+  if (response === null) {
     return NextResponse.json({ error: "النموذج غير موجود" }, { status: 404 });
+  }
+  if (response === "unpublished") {
+    return NextResponse.json(
+      { error: "لا يمكن إرسال استجابة لنموذج غير منشور" },
+      { status: 422 }
+    );
   }
   return NextResponse.json(
     { data: response, message: "تم إرسال الاستمارة بنجاح" },
