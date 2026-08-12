@@ -10,7 +10,7 @@ import {
   Hash,
   CheckCircle2,
 } from "lucide-react";
-import type { Form, FormResponse, Section } from "@/shared/types";
+import type { AnswerValue, Form, FormResponse, Section } from "@/shared/types";
 import { motionTokens } from "@/styles/design-tokens";
 import { FadeIn } from "@/shared/components/motion";
 import { Card } from "@/components/ui/card";
@@ -186,7 +186,7 @@ function NonRepeatableBody({
   instance,
 }: {
   section: Section;
-  instance?: { answers: Record<string, AnswerValue | unknown> };
+  instance?: { answers: Record<string, AnswerValue> };
 }) {
   if (!instance) {
     return (
@@ -213,7 +213,7 @@ function RepeatableInstanceBody({
 }: {
   section: Section;
   instanceIndex: number;
-  answers: Record<string, AnswerValue | unknown>;
+  answers: Record<string, AnswerValue>;
   position: number;
   isLast: boolean;
 }) {

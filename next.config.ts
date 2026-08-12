@@ -25,13 +25,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Fail production builds on type errors — do not ship broken types.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  reactStrictMode: false,
+  reactStrictMode: true,
   async headers() {
     return [
       {

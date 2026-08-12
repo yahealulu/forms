@@ -4,8 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/shared/lib/api-client";
 import type { Form } from "@/shared/types";
 
+/** Form row as returned by list endpoint (includes aggregate counts). */
+export type FormListItem = Form & {
+  _questionCount?: number;
+  _responseCount?: number;
+};
+
 interface FormsListResponse {
-  data: (Form & { _questionCount?: number; _responseCount?: number })[];
+  data: FormListItem[];
 }
 interface FormResponse {
   data: Form;
@@ -25,9 +31,8 @@ function patchFormDetail(
   qc.setQueryData<Form>(formsKeys.detail(formId), (prev) =>
     prev ? { ...prev, ...patch } : prev
   );
-  qc.setQueryData<(Form & { _questionCount?: number; _responseCount?: number })[]>(
-    formsKeys.list(),
-    (prev) => prev?.map((f) => (f.id === formId ? { ...f, ...patch } : f))
+  qc.setQueryData<FormListItem[]>(formsKeys.list(), (prev) =>
+    prev?.map((f) => (f.id === formId ? { ...f, ...patch } : f))
   );
 }
 

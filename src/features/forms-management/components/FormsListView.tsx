@@ -19,7 +19,13 @@ import {
   Power,
   PowerOff,
 } from "lucide-react";
-import { useForms, useCreateForm, useDeleteForm, useUpdateForm } from "../hooks/useForms";
+import {
+  useForms,
+  useCreateForm,
+  useDeleteForm,
+  useUpdateForm,
+  type FormListItem,
+} from "../hooks/useForms";
 import { useUIStore } from "@/stores/useUIStore";
 import { motionTokens } from "@/styles/design-tokens";
 import { FadeIn, StaggerList, StaggerItem } from "@/shared/components/motion";
@@ -76,7 +82,7 @@ export function FormsListView() {
   const { data: forms, isLoading } = useForms();
   const setView = useUIStore((s) => s.setView);
   const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Form | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FormListItem | null>(null);
 
   const stats = {
     total: forms?.length ?? 0,
@@ -196,7 +202,7 @@ function FormCard({
   onOpenFiller,
   onDelete,
 }: {
-  form: Form & { _questionCount?: number; _responseCount?: number };
+  form: FormListItem;
   onOpenBuilder: () => void;
   onOpenResponses: () => void;
   onOpenFiller: () => void;
@@ -507,7 +513,7 @@ function DeleteFormDialog({
   form,
   onClose,
 }: {
-  form: Form | null;
+  form: FormListItem | null;
   onClose: () => void;
 }) {
   const [confirmText, setConfirmText] = useState("");
