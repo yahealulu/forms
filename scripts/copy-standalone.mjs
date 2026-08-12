@@ -1,6 +1,12 @@
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+// Vercel hosts Next.js natively — no standalone bundle needed.
+if (process.env.VERCEL === "1") {
+  console.log("Vercel detected — skipping standalone asset copy.");
+  process.exit(0);
+}
+
 const root = process.cwd();
 const standalone = join(root, ".next", "standalone");
 const standaloneNext = join(standalone, ".next");

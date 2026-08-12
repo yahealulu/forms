@@ -23,9 +23,12 @@ const securityHeaders = [
   },
 ];
 
+// Vercel uses its own output tracing — `standalone` breaks their NFT step
+// (ENOENT next-server.js.nft.json). Keep standalone for Docker/VPS only.
+const isVercel = process.env.VERCEL === "1";
+
 const nextConfig: NextConfig = {
-  output: "standalone",
-  // Fail production builds on type errors — do not ship broken types.
+  ...(isVercel ? {} : { output: "standalone" as const }),
   typescript: {
     ignoreBuildErrors: false,
   },
