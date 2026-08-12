@@ -34,6 +34,7 @@ import {
 import { ProgressIndicator } from "./ProgressIndicator";
 import { FormRenderer } from "./FormRenderer";
 import { SubmitSuccessAnimation } from "./SubmitSuccessAnimation";
+import { FormDisabledOverlay } from "./FormDisabledOverlay";
 
 export interface FormFillerViewProps {
   formId: string;
@@ -75,6 +76,11 @@ export function FormFillerView({ formId, mode = "admin" }: FormFillerViewProps) 
     return (
       <BrandLoader variant="page" label="جارٍ تحميل الاستمارة..." />
     );
+  }
+
+  // Public disabled form — full-screen overlay like submit success
+  if (isPublic && form && form.status === "published" && form.isEnabled === false) {
+    return <FormDisabledOverlay formTitle={form.title} />;
   }
 
   // Not-found / unavailable: public blocks draft+archived; admin preview allows drafts

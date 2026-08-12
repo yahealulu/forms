@@ -60,6 +60,8 @@ export interface Form {
   title: string;
   description: string;
   status: FormStatus;
+  /** When false, public fill URL shows disabled state (published forms only). */
+  isEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;

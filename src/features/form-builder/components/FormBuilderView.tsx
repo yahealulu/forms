@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DndContext,
   DragEndEvent,
+  DragOverEvent,
+  DragOverlay,
+  DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -34,11 +37,14 @@ import {
   useCreateSection,
   useReorderSections,
   useReorderQuestions,
+  reorderSectionsInForm,
+  reorderQuestionsInForm,
 } from "@/features/form-builder/hooks/useFormBuilder";
 import { useAdjustableState } from "@/features/form-builder/hooks/useAdjustableState";
 import { useUIStore } from "@/stores/useUIStore";
 import { SectionCard } from "./SectionCard";
 import { LivePreviewPanel } from "./LivePreviewPanel";
+import { SectionDragPreview, QuestionDragPreview } from "./DragPreview";
 import { questionTypeMeta, questionTypeOrder } from "./question-type-meta";
 import { FadeIn } from "@/shared/components/motion";
 import { motionTokens } from "@/styles/design-tokens";
@@ -95,55 +101,137 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
   const [title, setTitle] = useAdjustableState(form?.title ?? "");
   const [previewOpen, setPreviewOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [displayForm, setDisplayForm] = useState<Form | null>(null);
+
+  useEffect(() => {
+    if (form && !activeId) {
+      setDisplayForm(form);
+    }
+  }, [form, activeId]);
+
+  const workingForm = displayForm ?? form;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 2 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const sectionIds = useMemo(
-    () => (form?.sections ?? []).map((s) => s.id),
-    [form?.sections]
+    () => (workingForm?.sections ?? []).map((s) => s.id),
+    [workingForm?.sections]
   );
+
+  const activeDragItem = useMemo(() => {
+    if (!activeId || !workingForm) return null;
+    const sectionIndex = workingForm.sections.findIndex((s) => s.id === activeId);
+    if (sectionIndex >= 0) {
+      return {
+        type: "section" as const,
+        section: workingForm.sections[sectionIndex],
+        index: sectionIndex,
+      };
+    }
+    for (const section of workingForm.sections) {
+      const qIndex = section.questions.findIndex((q) => q.id === activeId);
+      if (qIndex >= 0) {
+        return {
+          type: "question" as const,
+          question: section.questions[qIndex],
+          index: qIndex,
+        };
+      }
+    }
+    return null;
+  }, [activeId, workingForm]);
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      setActiveId(String(event.active.id));
+      if (form) setDisplayForm(form);
+    },
+    [form]
+  );
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeIdStr = String(active.id);
+    const overIdStr = String(over.id);
+
+    setDisplayForm((prev) => {
+      if (!prev) return prev;
+
+      const sIds = prev.sections.map((s) => s.id);
+      if (sIds.includes(activeIdStr) && sIds.includes(overIdStr)) {
+        const oldIndex = sIds.indexOf(activeIdStr);
+        const newIndex = sIds.indexOf(overIdStr);
+        if (oldIndex === newIndex) return prev;
+        return reorderSectionsInForm(prev, arrayMove(sIds, oldIndex, newIndex));
+      }
+
+      for (const sec of prev.sections) {
+        const qIds = sec.questions.map((q) => q.id);
+        if (qIds.includes(activeIdStr) && qIds.includes(overIdStr)) {
+          const oldIndex = qIds.indexOf(activeIdStr);
+          const newIndex = qIds.indexOf(overIdStr);
+          if (oldIndex === newIndex) return prev;
+          return reorderQuestionsInForm(
+            prev,
+            sec.id,
+            arrayMove(qIds, oldIndex, newIndex)
+          );
+        }
+      }
+
+      return prev;
+    });
+  }, []);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const activeId = String(active.id);
-      const overId = String(over.id);
+      setActiveId(null);
 
-      // Section reorder?
-      if (sectionIds.includes(activeId) && sectionIds.includes(overId)) {
-        const oldIndex = sectionIds.indexOf(activeId);
-        const newIndex = sectionIds.indexOf(overId);
-        const reordered = arrayMove(sectionIds, oldIndex, newIndex);
-        reorderSections.mutate(reordered, {
-          onError: (e) => toast.error(e.message || "تعذّر تحديث الترتيب"),
-        });
+      if (!over || active.id === over.id || !displayForm || !form) {
+        setDisplayForm(null);
         return;
       }
 
-      // Question reorder (within same section only).
-      if (!form) return;
-      for (const sec of form.sections) {
-        const qIds = sec.questions.map((q) => q.id);
-        if (qIds.includes(activeId) && qIds.includes(overId)) {
-          const oldIndex = qIds.indexOf(activeId);
-          const newIndex = qIds.indexOf(overId);
-          const reordered = arrayMove(qIds, oldIndex, newIndex);
+      const newSectionIds = displayForm.sections.map((s) => s.id);
+      const oldSectionIds = form.sections.map((s) => s.id);
+      if (JSON.stringify(newSectionIds) !== JSON.stringify(oldSectionIds)) {
+        reorderSections.mutate(newSectionIds, {
+          onError: (e) => toast.error(e.message || "تعذّر تحديث الترتيب"),
+        });
+      }
+
+      for (const sec of displayForm.sections) {
+        const orig = form.sections.find((s) => s.id === sec.id);
+        if (!orig) continue;
+        const newQIds = sec.questions.map((q) => q.id);
+        const oldQIds = orig.questions.map((q) => q.id);
+        if (JSON.stringify(newQIds) !== JSON.stringify(oldQIds)) {
           reorderQuestions.mutate(
-            { sectionId: sec.id, orderedIds: reordered },
+            { sectionId: sec.id, orderedIds: newQIds },
             {
-              onError: (e) => toast.error(e.message || "تعذّر تحديث ترتيب الأسئلة"),
+              onError: (e) =>
+                toast.error(e.message || "تعذّر تحديث ترتيب الأسئلة"),
             }
           );
-          return;
         }
       }
+
+      setDisplayForm(null);
     },
-    [sectionIds, form, reorderSections, reorderQuestions]
+    [displayForm, form, reorderSections, reorderQuestions]
   );
+
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null);
+    setDisplayForm(null);
+  }, []);
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -243,7 +331,10 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex flex-1 min-h-0">
           {/* Right palette (lg+) */}
@@ -411,15 +502,14 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                 </FadeIn>
 
                 {/* Sections list (sortable) */}
-                {form.sections.length === 0 ? (
+                {workingForm && workingForm.sections.length === 0 ? (
                   <EmptyState onAddSection={handleAddSection} />
-                ) : (
+                ) : workingForm ? (
                   <SortableContext
                     items={sectionIds}
                     strategy={verticalListSortingStrategy}
                   >
                     <motion.div
-                      layout
                       initial="hidden"
                       animate="visible"
                       variants={{
@@ -431,18 +521,19 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                       className="flex flex-col gap-4"
                     >
                       <AnimatePresence initial={false}>
-                        {form.sections.map((section, idx) => (
+                        {workingForm.sections.map((section, idx) => (
                           <SectionCard
                             key={section.id}
                             formId={formId}
                             section={section}
                             index={idx}
+                            isDragActive={!!activeId}
                           />
                         ))}
                       </AnimatePresence>
                     </motion.div>
                   </SortableContext>
-                )}
+                ) : null}
 
                 {/* Footer add-section (always visible) */}
                 <div className="mt-5">
@@ -462,11 +553,25 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
 
           {/* Left preview (lg+, collapsible) */}
           <LivePreviewPanel
-            form={form}
+            form={workingForm ?? form}
             open={previewOpen}
             onToggle={() => setPreviewOpen((v) => !v)}
           />
         </div>
+
+        <DragOverlay dropAnimation={{ duration: 200, easing: "ease-out" }}>
+          {activeDragItem?.type === "section" ? (
+            <SectionDragPreview
+              section={activeDragItem.section}
+              index={activeDragItem.index}
+            />
+          ) : activeDragItem?.type === "question" ? (
+            <QuestionDragPreview
+              question={activeDragItem.question}
+              index={activeDragItem.index}
+            />
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       {/* Mobile palette sheet */}

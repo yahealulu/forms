@@ -62,6 +62,7 @@ interface QuestionEditorProps {
   formId: string;
   question: Question;
   index: number;
+  isDragActive?: boolean;
 }
 
 /**
@@ -71,7 +72,12 @@ interface QuestionEditorProps {
  * required toggle, "خيارات" popover (for choice types), type-specific config
  * (file_upload / rating / number), and a hover-confirmation delete button.
  */
-export function QuestionEditor({ formId, question, index }: QuestionEditorProps) {
+export function QuestionEditor({
+  formId,
+  question,
+  index,
+  isDragActive = false,
+}: QuestionEditorProps) {
   const {
     attributes,
     listeners,
@@ -85,9 +91,9 @@ export function QuestionEditor({ formId, question, index }: QuestionEditorProps)
   const deleteQuestion = useDeleteQuestion(formId);
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 30 : undefined,
+    transform: isDragging ? undefined : CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0.35 : 1,
   };
 
   const meta = questionTypeMeta[question.type];
@@ -125,15 +131,15 @@ export function QuestionEditor({ formId, question, index }: QuestionEditorProps)
     <motion.div
       ref={setNodeRef}
       style={style}
-      layout
+      layout={!isDragActive}
       initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: isDragging ? 0.35 : 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: motionTokens.duration.base, ease: motionTokens.ease.smooth }}
+      transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.smooth }}
       className={cn(
         "group relative rounded-xl border bg-card shadow-sm",
         "transition-shadow hover:shadow-md",
-        isDragging && "shadow-lg ring-2 ring-gold/40"
+        isDragging && "shadow-none ring-2 ring-gold/20 border-dashed"
       )}
     >
       <div className="flex items-stretch gap-2 p-3">

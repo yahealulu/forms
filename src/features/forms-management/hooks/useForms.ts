@@ -17,6 +17,20 @@ export const formsKeys = {
   detail: (id: string) => [...formsKeys.all, "detail", id] as const,
 };
 
+function patchFormDetail(
+  qc: ReturnType<typeof useQueryClient>,
+  formId: string,
+  patch: Partial<Form>
+) {
+  qc.setQueryData<Form>(formsKeys.detail(formId), (prev) =>
+    prev ? { ...prev, ...patch } : prev
+  );
+  qc.setQueryData<(Form & { _questionCount?: number; _responseCount?: number })[]>(
+    formsKeys.list(),
+    (prev) => prev?.map((f) => (f.id === formId ? { ...f, ...patch } : f))
+  );
+}
+
 export function useForms() {
   return useQuery({
     queryKey: formsKeys.list(),
@@ -49,7 +63,18 @@ export function useUpdateForm(formId: string) {
   return useMutation({
     mutationFn: (patch: Partial<Form>) =>
       api.patch<FormResponse>(`/api/forms/${formId}`, patch).then((r) => r.data),
-    onSuccess: () => {
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: formsKeys.detail(formId) });
+      const previous = qc.getQueryData<Form>(formsKeys.detail(formId));
+      patchFormDetail(qc, formId, patch);
+      return { previous };
+    },
+    onError: (_err, _patch, ctx) => {
+      if (ctx?.previous) {
+        qc.setQueryData(formsKeys.detail(formId), ctx.previous);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: formsKeys.detail(formId) });
       qc.invalidateQueries({ queryKey: formsKeys.list() });
     },

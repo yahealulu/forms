@@ -15,8 +15,11 @@ import {
   Inbox,
   Link2,
   Copy,
+  ExternalLink,
+  Power,
+  PowerOff,
 } from "lucide-react";
-import { useForms, useCreateForm, useDeleteForm } from "../hooks/useForms";
+import { useForms, useCreateForm, useDeleteForm, useUpdateForm } from "../hooks/useForms";
 import { useUIStore } from "@/stores/useUIStore";
 import { motionTokens } from "@/styles/design-tokens";
 import { FadeIn, StaggerList, StaggerItem } from "@/shared/components/motion";
@@ -55,7 +58,13 @@ import { toast } from "sonner";
 import type { Form } from "@/shared/types";
 import { cn } from "@/lib/utils";
 import { BrandLoader } from "@/shared/components/BrandLoader";
-import { copyPublicFormUrl } from "@/shared/lib/public-form-url";
+import { copyPublicFormUrl, getPublicFormUrl } from "@/shared/lib/public-form-url";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const statusLabels: Record<Form["status"], { label: string; variant: "default" | "secondary" | "outline" }> = {
   published: { label: "منشور", variant: "default" },
@@ -77,6 +86,7 @@ export function FormsListView() {
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex flex-col flex-1">
       {/* Hero / Stats band */}
       <div className="border-b border-border bg-gradient-to-b from-sidebar/40 to-background">
@@ -140,6 +150,7 @@ export function FormsListView() {
         onClose={() => setDeleteTarget(null)}
       />
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -191,6 +202,7 @@ function FormCard({
   onOpenFiller: () => void;
   onDelete: () => void;
 }) {
+  const updateForm = useUpdateForm(form.id);
   const status = statusLabels[form.status];
   const updated = new Date(form.updatedAt).toLocaleDateString("ar-SA", {
     year: "numeric",
@@ -198,6 +210,7 @@ function FormCard({
     day: "numeric",
   });
   const isPublished = form.status === "published";
+  const isEnabled = form.isEnabled !== false;
 
   const handleCopyLink = async () => {
     try {
@@ -206,6 +219,21 @@ function FormCard({
     } catch {
       toast.error("تعذّر نسخ الرابط");
     }
+  };
+
+  const handleOpenLink = () => {
+    window.open(getPublicFormUrl(form.id), "_blank", "noopener,noreferrer");
+  };
+
+  const handleToggleEnabled = () => {
+    updateForm.mutate(
+      { isEnabled: !isEnabled },
+      {
+        onSuccess: () =>
+          toast.success(isEnabled ? "تم تعطيل النموذج" : "تم تفعيل النموذج"),
+        onError: () => toast.error("تعذّر تحديث حالة النموذج"),
+      }
+    );
   };
 
   return (
@@ -272,6 +300,11 @@ function FormCard({
           <Badge variant={status.variant} className="gap-1">
             {status.label}
           </Badge>
+          {isPublished && !isEnabled && (
+            <Badge variant="outline" className="gap-1 border-amber-500/40 text-amber-700 bg-amber-50">
+              معطّل
+            </Badge>
+          )}
           <Badge variant="outline" className="gap-1 font-normal">
             <ListChecks className="size-3" />
             {form._questionCount ?? 0} سؤال
@@ -284,28 +317,77 @@ function FormCard({
 
         <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
           <span className="text-[11px] text-muted-foreground shrink-0">آخر تحديث: {updated}</span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {isPublished && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCopyLink}
-                className="gap-1.5 min-h-9"
-                aria-label="نسخ رابط النموذج المنشور"
-              >
-                <Copy className="size-3.5" />
-                نسخ الرابط
-              </Button>
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={handleCopyLink}
+                      className="size-9 shrink-0"
+                      aria-label="نسخ رابط النموذج"
+                    >
+                      <Copy className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">نسخ الرابط</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={handleOpenLink}
+                      className="size-9 shrink-0"
+                      aria-label="فتح النموذج في تبويب جديد"
+                    >
+                      <ExternalLink className="size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">فتح في تبويب جديد</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={handleToggleEnabled}
+                      disabled={updateForm.isPending}
+                      className={cn(
+                        "size-9 shrink-0",
+                        !isEnabled && "border-amber-500/40 text-amber-700 hover:bg-amber-50"
+                      )}
+                      aria-label={isEnabled ? "تعطيل النموذج" : "تفعيل النموذج"}
+                    >
+                      {isEnabled ? (
+                        <PowerOff className="size-4" />
+                      ) : (
+                        <Power className="size-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {isEnabled ? "تعطيل النموذج" : "تفعيل النموذج"}
+                  </TooltipContent>
+                </Tooltip>
+              </>
             )}
-            <Button
-              size="sm"
-              variant="default"
-              onClick={onOpenBuilder}
-              className="gap-1.5 min-h-9"
-            >
-              <Pencil className="size-3.5" />
-              تحرير
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="default"
+                  onClick={onOpenBuilder}
+                  className="size-9 shrink-0"
+                  aria-label="تحرير النموذج"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">تحرير</TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </Card>

@@ -38,7 +38,6 @@ import {
   useCreateQuestion,
   useUpdateSection,
   useDeleteSection,
-  useReorderQuestions,
 } from "@/features/form-builder/hooks/useFormBuilder";
 import { useAdjustableState } from "@/features/form-builder/hooks/useAdjustableState";
 import { QuestionEditor } from "./QuestionEditor";
@@ -52,6 +51,7 @@ interface SectionCardProps {
   formId: string;
   section: Section;
   index: number;
+  isDragActive?: boolean;
 }
 
 /**
@@ -64,7 +64,12 @@ interface SectionCardProps {
  * Body: list of `QuestionEditor`s (each sortable within the section) plus an
  * "إضافة سؤال" button at the bottom with the `animate-attention-pulse` class.
  */
-export function SectionCard({ formId, section, index }: SectionCardProps) {
+export function SectionCard({
+  formId,
+  section,
+  index,
+  isDragActive = false,
+}: SectionCardProps) {
   const {
     attributes,
     listeners,
@@ -77,15 +82,14 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
   const updateSection = useUpdateSection(formId);
   const deleteSection = useDeleteSection(formId);
   const createQuestion = useCreateQuestion(formId);
-  const reorderQuestions = useReorderQuestions(formId);
 
   const [title, setTitle] = useAdjustableState(section.title);
   const [collapsed, setCollapsed] = useState(false);
 
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 40 : undefined,
+    transform: isDragging ? undefined : CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0.35 : 1,
   };
 
   const commitTitle = () => {
@@ -141,16 +145,16 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
     <motion.div
       ref={setNodeRef}
       style={style}
-      layout
+      layout={!isDragActive}
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: isDragging ? 0.35 : 1, y: 0 }}
       exit={{ opacity: 0, y: -12, scale: 0.98 }}
-      transition={{ duration: motionTokens.duration.base, ease: motionTokens.ease.smooth }}
-      whileHover={{ y: isDragging ? 0 : -2 }}
+      transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.smooth }}
+      whileHover={isDragActive || isDragging ? undefined : { y: -2 }}
       className={cn(
         "rounded-2xl border bg-card shadow-sm overflow-hidden",
         "transition-shadow hover:shadow-md",
-        isDragging && "shadow-xl ring-2 ring-gold/40",
+        isDragging && "shadow-none ring-2 ring-gold/20 border-dashed",
         section.isRepeatable && "border-gold/30"
       )}
     >
@@ -300,7 +304,6 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
               strategy={verticalListSortingStrategy}
             >
               <motion.div
-                layout
                 initial="hidden"
                 animate="visible"
                 variants={{
@@ -317,6 +320,7 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
                     formId={formId}
                     question={q}
                     index={i}
+                    isDragActive={isDragActive}
                   />
                 ))}
               </motion.div>
@@ -335,12 +339,6 @@ export function SectionCard({ formId, section, index }: SectionCardProps) {
               إضافة سؤال
             </Button>
           </div>
-        </div>
-      )}
-
-      {reorderQuestions.isPending && (
-        <div className="px-4 pb-3">
-          <p className="text-[11px] text-muted-foreground">جارٍ تحديث الترتيب...</p>
         </div>
       )}
     </motion.div>

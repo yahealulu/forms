@@ -3,7 +3,43 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/shared/lib/api-client";
 import { formsKeys } from "@/features/forms-management/hooks/useForms";
-import type { Option, Question, Section } from "@/shared/types";
+import type { Form, Option, Question, Section } from "@/shared/types";
+
+export function reorderSectionsInForm(form: Form, orderedIds: string[]): Form {
+  const map = new Map(form.sections.map((s) => [s.id, s]));
+  return {
+    ...form,
+    sections: orderedIds
+      .map((id, order) => {
+        const section = map.get(id);
+        return section ? { ...section, order } : null;
+      })
+      .filter(Boolean) as Section[],
+  };
+}
+
+export function reorderQuestionsInForm(
+  form: Form,
+  sectionId: string,
+  orderedIds: string[]
+): Form {
+  return {
+    ...form,
+    sections: form.sections.map((section) => {
+      if (section.id !== sectionId) return section;
+      const map = new Map(section.questions.map((q) => [q.id, q]));
+      return {
+        ...section,
+        questions: orderedIds
+          .map((id, order) => {
+            const question = map.get(id);
+            return question ? { ...question, order } : null;
+          })
+          .filter(Boolean) as Question[],
+      };
+    }),
+  };
+}
 
 // ── Sections ──
 
@@ -52,8 +88,21 @@ export function useReorderSections(formId: string) {
         formId,
         orderedIds,
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: formsKeys.detail(formId) });
+    onMutate: async (orderedIds) => {
+      await qc.cancelQueries({ queryKey: formsKeys.detail(formId) });
+      const previous = qc.getQueryData<Form>(formsKeys.detail(formId));
+      if (previous) {
+        qc.setQueryData(
+          formsKeys.detail(formId),
+          reorderSectionsInForm(previous, orderedIds)
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _ids, ctx) => {
+      if (ctx?.previous) {
+        qc.setQueryData(formsKeys.detail(formId), ctx.previous);
+      }
     },
   });
 }
@@ -105,8 +154,21 @@ export function useReorderQuestions(formId: string) {
         `/api/questions/${input.orderedIds[0]}/reorder`,
         { sectionId: input.sectionId, orderedIds: input.orderedIds }
       ),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: formsKeys.detail(formId) });
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: formsKeys.detail(formId) });
+      const previous = qc.getQueryData<Form>(formsKeys.detail(formId));
+      if (previous) {
+        qc.setQueryData(
+          formsKeys.detail(formId),
+          reorderQuestionsInForm(previous, input.sectionId, input.orderedIds)
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _input, ctx) => {
+      if (ctx?.previous) {
+        qc.setQueryData(formsKeys.detail(formId), ctx.previous);
+      }
     },
   });
 }

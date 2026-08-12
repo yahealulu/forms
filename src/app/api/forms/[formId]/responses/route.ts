@@ -42,6 +42,12 @@ export async function POST(
       { status: 422 }
     );
   }
+  if (response === "disabled") {
+    return NextResponse.json(
+      { error: "النموذج معطّل حالياً" },
+      { status: 422 }
+    );
+  }
   return NextResponse.json(
     { data: response, message: "تم إرسال الاستمارة بنجاح" },
     { status: 201 }
