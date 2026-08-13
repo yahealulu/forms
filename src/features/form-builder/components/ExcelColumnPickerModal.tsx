@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { motionTokens } from "@/styles/design-tokens";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,8 @@ interface ExcelColumnPickerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   columns: ExcelColumn[];
+  treatFirstRowAsHeader?: boolean;
+  onToggleHeader?: (firstRowIsOption: boolean) => void;
   onConfirm: (column: ExcelColumn) => void;
   onCancel?: () => void;
 }
@@ -45,11 +49,17 @@ export function ExcelColumnPickerModal({
   open,
   onOpenChange,
   columns,
+  treatFirstRowAsHeader = true,
+  onToggleHeader,
   onConfirm,
   onCancel,
 }: ExcelColumnPickerModalProps) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [shakingIdx, setShakingIdx] = useState<number | null>(null);
+
+  if (selectedIdx !== null && selectedIdx >= columns.length) {
+    setSelectedIdx(null);
+  }
 
   const reset = useCallback(() => {
     setSelectedIdx(null);
@@ -101,16 +111,33 @@ export function ExcelColumnPickerModal({
         showCloseButton={false}
         className="sm:max-w-[680px] p-0 overflow-hidden"
       >
-        <DialogHeader className="px-6 pt-6 pb-3 text-right">
-          <DialogTitle className="flex items-center gap-2 text-right">
-            <Layers className="size-5 text-gold-dark" />
+        <DialogHeader className="px-6 pt-6 pb-3">
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="size-5 text-gold-dark" aria-hidden="true" />
             هذا الملف يحتوي على أكثر من مجموعة خيارات — اختر واحدة لهذا السؤال.
           </DialogTitle>
-          <DialogDescription className="text-right">
+          <DialogDescription>
             تم اكتشاف {columns.length} مجموعات خيارات مستقلة في الملف. اختر
             المجموعة المناسبة لهذا السؤال فقط.
           </DialogDescription>
         </DialogHeader>
+
+        {onToggleHeader && (
+          <div className="px-6 flex items-start gap-2.5">
+            <Switch
+              id="picker-header-toggle"
+              checked={!treatFirstRowAsHeader}
+              onCheckedChange={(checked) => onToggleHeader(checked)}
+              aria-label="الصف الأول خيار وليس عنواناً"
+            />
+            <Label
+              htmlFor="picker-header-toggle"
+              className="text-xs leading-snug text-foreground cursor-pointer"
+            >
+              الصف الأول خيار وليس عنواناً
+            </Label>
+          </div>
+        )}
 
         <motion.div
           initial="hidden"
@@ -120,7 +147,6 @@ export function ExcelColumnPickerModal({
             visible: { transition: { staggerChildren: motionTokens.stagger.cards } },
           }}
           className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-6 pb-2"
-          dir="rtl"
         >
           {columns.map((col, idx) => (
             <ColumnCard
@@ -136,7 +162,6 @@ export function ExcelColumnPickerModal({
 
         <DialogFooter
           className="px-6 py-4 border-t border-border bg-muted/30 flex-row items-center justify-between gap-3"
-          dir="rtl"
         >
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Sparkles className="size-3.5 text-gold-dark" />
@@ -203,7 +228,8 @@ function ColumnCard({ column, selected, shaking, onClick }: ColumnCardProps) {
           : { duration: motionTokens.duration.fast, ease: motionTokens.ease.snappy }
       }
       className={cn(
-        "relative text-right p-4 rounded-2xl border-2 bg-card transition-all duration-200 cursor-pointer",
+        "relative text-start p-4 rounded-2xl border-2 bg-card transition-all duration-200 cursor-pointer",
+        selected && "pe-12",
         "shadow-sm hover:shadow-md",
         selected
           ? "border-gold ring-2 ring-gold shadow-[0_0_0_4px_rgba(182,157,110,0.15)]"
@@ -219,7 +245,7 @@ function ColumnCard({ column, selected, shaking, onClick }: ColumnCardProps) {
             duration: motionTokens.duration.base,
             ease: motionTokens.ease.snappy,
           }}
-          className="absolute top-3 left-3 flex size-7 items-center justify-center rounded-full bg-gold text-white shadow-sm"
+          className="absolute top-3 end-3 flex size-7 items-center justify-center rounded-full bg-gold text-white shadow-sm"
         >
           <CheckCircle2 className="size-4" />
         </motion.span>

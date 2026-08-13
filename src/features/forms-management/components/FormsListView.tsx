@@ -429,7 +429,6 @@ function CreateFormDialog({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [entityName, setEntityName] = useState("");
   const createForm = useCreateForm();
 
   const handleSubmit = () => {
@@ -441,14 +440,13 @@ function CreateFormDialog({
       {
         title: title.trim(),
         description: description.trim(),
-        entityName: entityName.trim() || "الجهة الحكومية",
+        entityName: "الجهة الحكومية",
       },
       {
         onSuccess: (form) => {
           toast.success("تم إنشاء النموذج بنجاح");
           setTitle("");
           setDescription("");
-          setEntityName("");
           onOpenChange(false);
           useUIStore.getState().setView({ name: "builder", formId: form.id });
         },
@@ -474,15 +472,6 @@ function CreateFormDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="مثال: طلب ترخيص نشاط تجاري"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="form-entity">اسم الجهة</Label>
-            <Input
-              id="form-entity"
-              value={entityName}
-              onChange={(e) => setEntityName(e.target.value)}
-              placeholder="مثال: بلدية المنطقة الكبرى"
             />
           </div>
           <div className="space-y-2">

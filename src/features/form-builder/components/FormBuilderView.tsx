@@ -577,9 +577,9 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
       {/* Mobile palette sheet */}
       <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>
         <SheetContent side="right" className="w-[280px] sm:max-w-[280px] p-0">
-          <SheetHeader className="px-4 pt-5 pb-3 text-right">
-            <SheetTitle className="text-right">العناصر</SheetTitle>
-            <SheetDescription className="text-right">
+          <SheetHeader className="px-4 pt-5 pb-3">
+            <SheetTitle>العناصر</SheetTitle>
+            <SheetDescription>
               أضف قسماً جديداً أو تعرّف على أنواع الأسئلة.
             </SheetDescription>
           </SheetHeader>

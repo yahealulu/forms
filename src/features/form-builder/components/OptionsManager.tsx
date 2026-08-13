@@ -58,12 +58,10 @@ export function OptionsManager({ formId, questionId, options }: OptionsManagerPr
 
   return (
     <div className="flex flex-col gap-3 w-full min-w-0">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <ListPlus className="size-4 text-gold-dark" />
-          <span className="text-sm font-medium text-foreground">الخيارات</span>
-        </div>
-        <Badge variant="outline" className="text-[11px] font-normal">
+      <div className="flex items-center gap-2 pe-1">
+        <ListPlus className="size-4 shrink-0 text-gold-dark" aria-hidden="true" />
+        <span className="text-sm font-medium text-foreground">الخيارات</span>
+        <Badge variant="outline" className="text-[11px] font-normal shrink-0">
           {options.length} خيار
         </Badge>
       </div>
@@ -221,7 +219,7 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
         <button
           type="button"
           onClick={startEdit}
-          className="flex-1 text-right text-sm text-foreground truncate hover:text-gold-dark transition-colors"
+          className="flex-1 text-start text-sm text-foreground truncate hover:text-gold-dark transition-colors"
           title="انقر للتعديل"
         >
           {option.label}
