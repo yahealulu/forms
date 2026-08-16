@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -20,61 +20,88 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
-import { motionTokens } from "@/styles/design-tokens";
 import { layoutTokens } from "@/styles/design-tokens";
 import { cn } from "@/lib/utils";
+import { useBuilderStore } from "@/features/form-builder/store/useBuilderStore";
 import type { Form, Question, Section } from "@/shared/types";
 
 interface LivePreviewPanelProps {
-  form: Form;
   open: boolean;
   onToggle: () => void;
 }
 
-/**
- * LivePreviewPanel — a collapsible, read-only rendering of the form as the
- * end user would see it. Inputs are display-only (non-functional).
- *
- * Position: on the LEFT (RTL trailing side). Max width ~400px, scrollable.
- * When hidden, the canvas takes full width.
- */
-export function LivePreviewPanel({ form, open, onToggle }: LivePreviewPanelProps) {
-  return (
-    <AnimatePresence initial={false} mode="popLayout">
-      {open ? (
-        <motion.aside
-          key="preview-open"
-          initial={{ width: 0, opacity: 0, x: -16 }}
-          animate={{ width: layoutTokens.previewPanelWidth, opacity: 1, x: 0 }}
-          exit={{ width: 0, opacity: 0, x: -16 }}
-          transition={{ duration: motionTokens.duration.slow, ease: motionTokens.ease.smooth }}
-          className="shrink-0 border-l border-border bg-muted/20 overflow-hidden hidden lg:block"
-          aria-label="معاينة مباشرة"
-        >
-          <div
-            className="h-full flex flex-col"
-            style={{ width: layoutTokens.previewPanelWidth }}
-          >
-            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-background">
-              <div className="flex items-center gap-2">
-                <Eye className="size-4 text-gold-dark" />
-                <span className="text-sm font-semibold text-foreground">
-                  معاينة مباشرة
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                onClick={onToggle}
-                aria-label="إخفاء المعاينة"
-              >
-                <EyeOff className="size-4" />
-              </Button>
-            </div>
+const PREVIEW_DEBOUNCE_MS = 400;
 
-            <ScrollArea className="flex-1">
-              <div className="p-4 space-y-4" dir="rtl">
+export function LivePreviewPanel({ open, onToggle }: LivePreviewPanelProps) {
+  const [snapshot, setSnapshot] = useState<Form | null>(() =>
+    useBuilderStore.getState().assembleForm()
+  );
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const unsub = useBuilderStore.subscribe(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setSnapshot(useBuilderStore.getState().assembleForm());
+      }, PREVIEW_DEBOUNCE_MS);
+    });
+    setSnapshot(useBuilderStore.getState().assembleForm());
+    return () => {
+      unsub();
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const form = snapshot;
+
+  if (!open) {
+    return (
+      <div className="shrink-0 hidden lg:flex">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onToggle}
+          className="m-2 gap-2"
+          aria-label="إظهار المعاينة المباشرة"
+        >
+          <Eye className="size-4 text-gold-dark" />
+          معاينة مباشرة
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <aside
+      className="shrink-0 border-l border-border bg-muted/20 overflow-hidden hidden lg:block"
+      aria-label="معاينة مباشرة"
+      style={{ width: layoutTokens.previewPanelWidth }}
+    >
+      <div className="h-full flex flex-col" style={{ width: layoutTokens.previewPanelWidth }}>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-background">
+          <div className="flex items-center gap-2">
+            <Eye className="size-4 text-gold-dark" />
+            <span className="text-sm font-semibold text-foreground">معاينة مباشرة</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={onToggle}
+            aria-label="إخفاء المعاينة"
+          >
+            <EyeOff className="size-4" />
+          </Button>
+        </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-4 space-y-4" dir="rtl">
+            {!form ? (
+              <div className="text-center py-8 text-xs text-muted-foreground">
+                جارٍ تجهيز المعاينة...
+              </div>
+            ) : (
+              <>
                 <div className="rounded-xl bg-background border border-border p-4">
                   <h3 className="font-bold text-base text-foreground leading-tight">
                     {form.title || "نموذج بلا عنوان"}
@@ -101,10 +128,7 @@ export function LivePreviewPanel({ form, open, onToggle }: LivePreviewPanelProps
                 )}
 
                 <div className="pt-2">
-                  <Button
-                    className="w-full gap-2 bg-gold-dark text-white hover:bg-gold-dark/90"
-                    disabled
-                  >
+                  <Button className="w-full gap-2 builder-cta-accent" disabled>
                     <ChevronLeft className="size-4 rtl-flip" />
                     إرسال النموذج
                   </Button>
@@ -112,44 +136,18 @@ export function LivePreviewPanel({ form, open, onToggle }: LivePreviewPanelProps
                     هذه المعاينة غير تفاعلية — للتعبئة الفعلية استخدم زر «معاينة».
                   </p>
                 </div>
-              </div>
-            </ScrollArea>
+              </>
+            )}
           </div>
-        </motion.aside>
-      ) : (
-        <motion.div
-          key="preview-closed"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: motionTokens.duration.fast }}
-          className="shrink-0 hidden lg:flex"
-        >
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onToggle}
-            className="m-2 gap-2"
-            aria-label="إظهار المعاينة المباشرة"
-          >
-            <Eye className="size-4 text-gold-dark" />
-            معاينة مباشرة
-          </Button>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </ScrollArea>
+      </div>
+    </aside>
   );
 }
 
 function PreviewSection({ section, index }: { section: Section; index: number }) {
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: motionTokens.duration.base, ease: motionTokens.ease.smooth }}
-      className="rounded-xl bg-background border border-border p-4"
-    >
+    <div className="rounded-xl bg-background border border-border p-4">
       <div className="flex items-center gap-2 mb-3">
         <Badge
           variant="outline"
@@ -174,7 +172,7 @@ function PreviewSection({ section, index }: { section: Section; index: number })
           ))}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -306,9 +304,7 @@ function PreviewInput({ question }: { question: Question }) {
               className={cn("size-5 text-gold-dark/40", i === 0 && "fill-gold/30")}
             />
           ))}
-          <span className="text-[10px] text-muted-foreground ms-2">
-            من 1 إلى {max}
-          </span>
+          <span className="text-[10px] text-muted-foreground ms-2">من 1 إلى {max}</span>
         </div>
       );
     }

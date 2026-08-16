@@ -1,36 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { memo, useState } from "react";
 import { ListPlus, Plus, Trash2, Check, X, Pencil } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ExcelImportDropzone } from "./ExcelImportDropzone";
-import { useFormDraft } from "@/features/form-builder/context/FormBuilderDraftContext";
-import { motionTokens } from "@/styles/design-tokens";
+import { useBuilderStore } from "@/features/form-builder/store/useBuilderStore";
+import { toastUndo } from "@/features/form-builder/lib/toastUndo";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import type { Option } from "@/shared/types";
 
 interface OptionsManagerProps {
   questionId: string;
-  options: Option[];
 }
 
-/**
- * OptionsManager — manage the options of a single choice question.
- *
- * - List of current options with inline-edit (click to edit) and delete.
- * - Manual add via input + "إضافة" button (calls `useAddOption`).
- * - `ExcelImportDropzone` at the bottom for Excel import.
- * - When `useImportExcelOptions` succeeds, options animate in one-by-one via
- *   staggered fade + slide-up (Framer Motion `staggerChildren`).
- */
-export function OptionsManager({ questionId, options }: OptionsManagerProps) {
+export function OptionsManager({ questionId }: OptionsManagerProps) {
   const [newLabel, setNewLabel] = useState("");
-  const { addOption, updateOption, deleteOption, importOptions } = useFormDraft();
+  const options = useBuilderStore(
+    (s) => s.questionsById[questionId]?.options ?? EMPTY_OPTIONS
+  );
 
   const handleAdd = () => {
     const trimmed = newLabel.trim();
@@ -38,7 +28,7 @@ export function OptionsManager({ questionId, options }: OptionsManagerProps) {
       toast.error("يرجى إدخال نص الخيار");
       return;
     }
-    addOption(questionId, trimmed);
+    useBuilderStore.getState().addOption(questionId, trimmed);
     setNewLabel("");
   };
 
@@ -61,29 +51,11 @@ export function OptionsManager({ questionId, options }: OptionsManagerProps) {
               </p>
             </div>
           ) : (
-            <motion.ul
-              initial="hidden"
-              animate="visible"
-              variants={{
-                hidden: {},
-                visible: { transition: { staggerChildren: motionTokens.stagger.list } },
-              }}
-              className="flex flex-col gap-1.5"
-            >
-              <AnimatePresence initial={false}>
-                {options.map((opt) => (
-                  <OptionRow
-                    key={opt.id}
-                    option={opt}
-                    questionId={questionId}
-                    onUpdate={(label) => updateOption(questionId, opt.id, label)}
-                    onDelete={() => deleteOption(questionId, opt.id)}
-                    saving={false}
-                    deleting={false}
-                  />
-                ))}
-              </AnimatePresence>
-            </motion.ul>
+            <ul className="flex flex-col gap-1.5">
+              {options.map((opt) => (
+                <OptionRow key={opt.id} option={opt} questionId={questionId} />
+              ))}
+            </ul>
           )}
         </div>
       </ScrollArea>
@@ -116,7 +88,7 @@ export function OptionsManager({ questionId, options }: OptionsManagerProps) {
       <div className="pt-2 border-t border-border">
         <ExcelImportDropzone
           onImport={(values) => {
-            importOptions(questionId, values);
+            useBuilderStore.getState().importOptions(questionId, values);
           }}
         />
       </div>
@@ -124,16 +96,15 @@ export function OptionsManager({ questionId, options }: OptionsManagerProps) {
   );
 }
 
-interface OptionRowProps {
+const EMPTY_OPTIONS: Option[] = [];
+
+const OptionRow = memo(function OptionRow({
+  option,
+  questionId,
+}: {
   option: Option;
   questionId: string;
-  onUpdate: (label: string) => void;
-  onDelete: () => void;
-  saving: boolean;
-  deleting: boolean;
-}
-
-function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowProps) {
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(option.label);
 
@@ -154,7 +125,7 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
       setEditing(false);
       return;
     }
-    onUpdate(trimmed);
+    useBuilderStore.getState().updateOption(questionId, option.id, trimmed);
     setEditing(false);
   };
 
@@ -163,15 +134,16 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
     setEditing(false);
   };
 
+  const handleDelete = () => {
+    const snap = useBuilderStore.getState().deleteOption(questionId, option.id);
+    if (!snap) return;
+    toastUndo("تم حذف الخيار", () => {
+      useBuilderStore.getState().restoreOption(snap);
+    });
+  };
+
   return (
-    <motion.li
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8, transition: { duration: motionTokens.duration.fast } }}
-      transition={{ duration: motionTokens.duration.base, ease: motionTokens.ease.smooth }}
-      className="group flex items-center gap-2 rounded-lg border border-border bg-background px-2 py-1.5 hover:border-gold/40 transition-colors"
-    >
+    <li className="group flex items-center gap-2 rounded-lg border border-border bg-background px-2 py-1.5 hover:border-gold/40 transition-colors">
       <span className="size-1.5 rounded-full bg-gold-dark/60 shrink-0" />
 
       {editing ? (
@@ -189,13 +161,12 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
             }
           }}
           className="h-7 flex-1 text-sm"
-          disabled={saving}
         />
       ) : (
         <button
           type="button"
           onClick={startEdit}
-          className="flex-1 text-start text-sm text-foreground truncate hover:text-gold-dark transition-colors"
+          className="flex-1 text-start text-sm text-foreground truncate hover:text-gold-dark transition-colors cursor-pointer"
           title="انقر للتعديل"
         >
           {option.label}
@@ -210,7 +181,6 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
               variant="ghost"
               className="size-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
               onClick={commit}
-              disabled={saving}
               aria-label="حفظ"
             >
               <Check className="size-3.5" />
@@ -240,8 +210,7 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
               size="icon"
               variant="ghost"
               className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              onClick={onDelete}
-              disabled={deleting}
+              onClick={handleDelete}
               aria-label="حذف"
             >
               <Trash2 className="size-3.5" />
@@ -249,6 +218,6 @@ function OptionRow({ option, onUpdate, onDelete, saving, deleting }: OptionRowPr
           </>
         )}
       </div>
-    </motion.li>
+    </li>
   );
-}
+});

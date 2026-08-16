@@ -1,17 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { useSortable } from "@dnd-kit/sortable";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { memo, useState } from "react";
 import {
-  GripVertical,
   Plus,
   Trash2,
   Repeat,
   ChevronDown,
   ChevronUp,
+  Copy,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,47 +27,40 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useAdjustableState } from "@/features/form-builder/hooks/useAdjustableState";
-import { useFormDraft } from "@/features/form-builder/context/FormBuilderDraftContext";
-import { QuestionEditor } from "./QuestionEditor";
+import { useBuilderStore } from "@/features/form-builder/store/useBuilderStore";
+import { toastUndo } from "@/features/form-builder/lib/toastUndo";
+import { QuestionRow } from "./QuestionRow";
 import { RepeatableSectionSettings } from "./RepeatableSectionSettings";
-import { motionTokens } from "@/styles/design-tokens";
+import { ReorderButtons } from "./ReorderButtons";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Section } from "@/shared/types";
 
 interface SectionCardProps {
-  section: Section;
+  sectionId: string;
   index: number;
-  isDragActive?: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
-export function SectionCard({
-  section,
+export const SectionCard = memo(function SectionCard({
+  sectionId,
   index,
-  isDragActive = false,
+  canMoveUp,
+  canMoveDown,
 }: SectionCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: section.id });
+  const section = useBuilderStore((s) => s.sectionsById[sectionId]);
+  const questionIds = useBuilderStore(
+    (s) => s.questionOrderBySection[sectionId] ?? EMPTY_IDS
+  );
+  const expanded = useBuilderStore((s) => s.expandedSectionIds.includes(sectionId));
 
-  const { patchSection, deleteSection, addQuestion } = useFormDraft();
+  const [title, setTitle] = useAdjustableState(section?.title ?? "");
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const [title, setTitle] = useAdjustableState(section.title);
-  const [collapsed, setCollapsed] = useState(false);
-
-  const style: React.CSSProperties = {
-    transform: isDragging ? undefined : CSS.Transform.toString(transform),
-    transition: isDragging ? undefined : transition,
-    opacity: isDragging ? 0.35 : 1,
-  };
+  if (!section) return null;
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -81,52 +70,52 @@ export function SectionCard({
       return;
     }
     if (trimmed !== section.title) {
-      patchSection(section.id, { title: trimmed });
+      useBuilderStore.getState().patchSection(sectionId, { title: trimmed });
     }
   };
 
   const handleRepeatableToggle = (checked: boolean) => {
-    patchSection(section.id, { isRepeatable: checked });
+    useBuilderStore.getState().patchSection(sectionId, { isRepeatable: checked });
   };
 
   const handleRepeatableChange = (
     patch: Partial<Pick<Section, "minRepeat" | "maxRepeat" | "repeatLabel">>
   ) => {
-    patchSection(section.id, patch);
+    useBuilderStore.getState().patchSection(sectionId, patch);
   };
 
-  const questionIds = section.questions.map((q) => q.id);
+  const runDelete = () => {
+    const snap = useBuilderStore.getState().deleteSection(sectionId);
+    if (!snap) return;
+    toastUndo("تم حذف القسم", () => {
+      useBuilderStore.getState().restoreSection(snap);
+    });
+  };
+
+  const handleDelete = () => {
+    if (questionIds.length > 0) {
+      setConfirmOpen(true);
+      return;
+    }
+    runDelete();
+  };
 
   return (
-    <motion.div
-      ref={setNodeRef}
-      style={style}
-      layout={!isDragActive}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: isDragging ? 0.35 : 1, y: 0 }}
-      exit={{ opacity: 0, y: -12, scale: 0.98 }}
-      transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.smooth }}
-      whileHover={isDragActive || isDragging ? undefined : { y: -2 }}
+    <article
       className={cn(
-        "rounded-2xl border bg-card shadow-sm overflow-hidden",
-        "transition-shadow hover:shadow-md",
-        isDragging && "shadow-none ring-2 ring-gold/20 border-dashed",
+        "rounded-2xl border bg-card shadow-sm overflow-hidden builder-card",
         section.isRepeatable && "border-gold/30"
       )}
     >
       <div className="flex items-center gap-2 p-4 border-b border-border bg-muted/20">
-        <button
-          type="button"
-          className={cn(
-            "flex items-center justify-center w-6 shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors",
-            "touch-none rounded-md hover:bg-muted"
-          )}
-          aria-label="اسحب لإعادة ترتيب الأقسام"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-5" />
-        </button>
+        <ReorderButtons
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          onMoveUp={() => useBuilderStore.getState().moveSection(sectionId, -1)}
+          onMoveDown={() => useBuilderStore.getState().moveSection(sectionId, 1)}
+          upLabel="نقل القسم للأعلى"
+          downLabel="نقل القسم للأسفل"
+        />
 
         <Badge
           variant="outline"
@@ -138,6 +127,7 @@ export function SectionCard({
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          onFocus={() => useBuilderStore.getState().setActiveSection(sectionId)}
           onBlur={commitTitle}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -145,17 +135,17 @@ export function SectionCard({
               (e.target as HTMLInputElement).blur();
             }
           }}
-          className="flex-1 h-9 min-w-[8rem] font-semibold text-base md:text-base border-transparent hover:border-input focus-visible:border-input bg-transparent"
+          className="flex-1 h-9 min-w-[8rem] font-semibold text-base border-transparent hover:border-input focus-visible:border-input bg-transparent"
           placeholder="عنوان القسم"
         />
 
         <Badge variant="outline" className="shrink-0 text-[11px] font-normal gap-1">
-          {section.questions.length} سؤال
+          {questionIds.length} سؤال
         </Badge>
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex items-center gap-2.5 shrink-0 cursor-default">
+            <div className="flex items-center gap-2.5 shrink-0">
               <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
                 قابل للتكرار
               </span>
@@ -177,60 +167,75 @@ export function SectionCard({
               variant="ghost"
               size="icon"
               className="size-8 text-muted-foreground"
-              onClick={() => setCollapsed((v) => !v)}
-              aria-label={collapsed ? "توسيع" : "طي"}
+              onClick={() => useBuilderStore.getState().duplicateSection(sectionId)}
+              aria-label="نسخ القسم"
             >
-              {collapsed ? (
-                <ChevronDown className="size-4" />
-              ) : (
+              <Copy className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">نسخ القسم</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground"
+              onClick={() => useBuilderStore.getState().toggleSectionExpanded(sectionId)}
+              aria-label={expanded ? "طي" : "توسيع"}
+            >
+              {expanded ? (
                 <ChevronUp className="size-4" />
+              ) : (
+                <ChevronDown className="size-4" />
               )}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top">
-            {collapsed ? "توسيع القسم" : "طي القسم"}
+            {expanded ? "طي القسم" : "توسيع القسم"}
           </TooltipContent>
         </Tooltip>
 
-        <AlertDialog>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  aria-label="حذف القسم"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </AlertDialogTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="top">حذف القسم</TooltipContent>
-          </Tooltip>
-          <AlertDialogContent className="sm:max-w-[420px]">
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <Trash2 className="size-5 text-destructive" />
-                حذف القسم
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                سيتم حذف القسم «{section.title}» وجميع أسئلته
-                ({section.questions.length} سؤال) من المسودة. اضغط حفظ لتثبيت الحذف.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>إلغاء</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => deleteSection(section.id)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                حذف
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={handleDelete}
+              aria-label="حذف القسم"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">حذف القسم</TooltipContent>
+        </Tooltip>
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="size-5 text-destructive" />
+              حذف القسم
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف القسم «{section.title}» وجميع أسئلته ({questionIds.length} سؤال).
+              يمكنك التراجع من الإشعار بعد الحذف.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={runDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RepeatableSectionSettings
         isRepeatable={section.isRepeatable}
@@ -240,9 +245,9 @@ export function SectionCard({
         onChange={handleRepeatableChange}
       />
 
-      {!collapsed && (
+      {expanded && (
         <div className="p-4 pt-3">
-          {section.questions.length === 0 ? (
+          {questionIds.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 px-3 text-center border border-dashed border-border rounded-xl">
               <Repeat className="size-6 text-muted-foreground mb-2" />
               <p className="text-xs text-muted-foreground">
@@ -250,39 +255,25 @@ export function SectionCard({
               </p>
             </div>
           ) : (
-            <SortableContext
-              items={questionIds}
-              strategy={verticalListSortingStrategy}
-            >
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={{
-                  hidden: {},
-                  visible: {
-                    transition: { staggerChildren: motionTokens.stagger.list },
-                  },
-                }}
-                className="flex flex-col gap-2"
-              >
-                {section.questions.map((q, i) => (
-                  <QuestionEditor
-                    key={q.id}
-                    question={q}
-                    index={i}
-                    isDragActive={isDragActive}
-                  />
-                ))}
-              </motion.div>
-            </SortableContext>
+            <div className="flex flex-col gap-2">
+              {questionIds.map((qid, i) => (
+                <QuestionRow
+                  key={qid}
+                  questionId={qid}
+                  index={i}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < questionIds.length - 1}
+                />
+              ))}
+            </div>
           )}
 
           <div className="mt-3">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => addQuestion(section.id)}
-              className="w-full gap-2 border-dashed border-2 text-gold-dark hover:bg-gold/5 hover:border-gold animate-attention-pulse"
+              onClick={() => useBuilderStore.getState().addQuestion(sectionId)}
+              className="w-full gap-2 border-dashed border-2 text-gold-dark hover:bg-gold/5 hover:border-gold"
             >
               <Plus className="size-4" />
               إضافة سؤال
@@ -290,6 +281,8 @@ export function SectionCard({
           </div>
         </div>
       )}
-    </motion.div>
+    </article>
   );
-}
+});
+
+const EMPTY_IDS: string[] = [];
