@@ -152,6 +152,7 @@ export function ResponsesView({ formId }: { formId: string }) {
         ) : responses && responses.length > 0 ? (
           <ResponsesTable
             responses={responses}
+            form={form}
             loading={false}
             onRowClick={openRow}
           />

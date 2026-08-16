@@ -1,7 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/shared/components/layout/Logo";
 import { useUIStore } from "@/stores/useUIStore";
@@ -106,12 +107,17 @@ export function SubmitSuccessAnimation({
 
   const setView = useUIStore((s) => s.setView);
   const isPublic = mode === "public";
+  const [closeBlocked, setCloseBlocked] = useState(false);
 
   const handleReturn = () => {
-    onDismiss?.();
     if (!isPublic) {
+      onDismiss?.();
       setView({ name: "dashboard" });
+      return;
     }
+    // Tab opened via window.open can close itself. Direct URL visits cannot.
+    window.close();
+    setCloseBlocked(true);
   };
 
   return (
@@ -182,15 +188,27 @@ export function SubmitSuccessAnimation({
           </p>
         </div>
 
-        <div ref={buttonRef} className="mt-8">
+        <div ref={buttonRef} className="mt-8 space-y-3">
           <Button
             type="button"
             size="lg"
             onClick={handleReturn}
             className="bg-gold-gradient text-white hover:opacity-90 shadow-sm"
           >
-            {isPublic ? "إغلاق" : "العودة للوحة التحكم"}
+            {isPublic ? (
+              <>
+                <X className="size-4" />
+                إغلاق التبويب
+              </>
+            ) : (
+              "العودة للوحة التحكم"
+            )}
           </Button>
+          {isPublic && closeBlocked && (
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              تعذّر إغلاق التبويب تلقائياً. يمكنك إغلاقه يدوياً من المتصفح.
+            </p>
+          )}
         </div>
       </div>
     </div>

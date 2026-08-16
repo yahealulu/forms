@@ -11,7 +11,6 @@ import { FormBuilderView } from "@/features/form-builder/components/FormBuilderV
 import { ResponsesView } from "@/features/responses/components/ResponsesView";
 import { ResponseDetailView } from "@/features/responses/components/ResponseDetailView";
 import { FormFillerView } from "@/features/form-filler/components/FormFillerView";
-import { AppSplash } from "@/shared/components/AppSplash";
 
 export default function Home() {
   const view = useUIStore((s) => s.view);
@@ -19,7 +18,6 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <AppSplash />
       <Header />
       <div className="flex flex-1">
         {!isFiller && <Sidebar />}

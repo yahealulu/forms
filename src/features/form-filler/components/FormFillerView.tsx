@@ -35,6 +35,7 @@ import { ProgressIndicator } from "./ProgressIndicator";
 import { FormRenderer } from "./FormRenderer";
 import { SubmitSuccessAnimation } from "./SubmitSuccessAnimation";
 import { FormDisabledOverlay } from "./FormDisabledOverlay";
+import { resolveSubmitter } from "@/features/responses/utils/resolveSubmitter";
 
 export interface FormFillerViewProps {
   formId: string;
@@ -140,6 +141,10 @@ export function FormFillerView({ formId, mode = "admin" }: FormFillerViewProps) 
   // false for the button to be enabled — this prevents double submission.
   const isSubmitting = methods.formState.isSubmitting || submitMutation.isPending;
 
+  if (submitted) {
+    return <SubmitSuccessAnimation mode={mode} />;
+  }
+
   return (
     <FormProvider {...methods}>
       <div className="relative flex min-h-screen flex-col bg-pattern-dots">
@@ -171,14 +176,6 @@ export function FormFillerView({ formId, mode = "admin" }: FormFillerViewProps) 
 
         {/* Sticky submit bar */}
         <SubmitBar isSubmitting={isSubmitting} onSubmit={onSubmit} />
-
-        {/* Success overlay */}
-        {submitted && (
-          <SubmitSuccessAnimation
-            mode={mode}
-            onDismiss={() => setSubmitted(false)}
-          />
-        )}
       </div>
     </FormProvider>
   );
@@ -296,7 +293,22 @@ function transformToFormResponse(
     };
   });
 
-  return { sections };
+  const submitter = extractSubmitterFromAnswers(sections, form);
+  return { sections, ...submitter };
+}
+
+function extractSubmitterFromAnswers(
+  sections: SectionResponse[],
+  form: Form
+): { submitterName?: string; submitterEmail?: string } {
+  const { name, email } = resolveSubmitter(
+    { id: "", formId: form.id, submittedAt: "", sections, completion: 0 },
+    form
+  );
+  return {
+    ...(name ? { submitterName: name } : {}),
+    ...(email ? { submitterEmail: email } : {}),
+  };
 }
 
 /**

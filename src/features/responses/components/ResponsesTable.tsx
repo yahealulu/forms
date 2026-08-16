@@ -13,7 +13,8 @@ import {
   Mail,
   Clock,
 } from "lucide-react";
-import type { FormResponse } from "@/shared/types";
+import type { Form, FormResponse } from "@/shared/types";
+import { resolveSubmitter } from "../utils/resolveSubmitter";
 import { motionTokens } from "@/styles/design-tokens";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -65,10 +66,12 @@ function formatDateTime(iso: string): string {
 
 export function ResponsesTable({
   responses,
+  form,
   loading,
   onRowClick,
 }: {
   responses: FormResponse[];
+  form?: Form;
   loading: boolean;
   onRowClick: (responseId: string) => void;
 }) {
@@ -80,9 +83,10 @@ export function ResponsesTable({
     const q = query.trim().toLowerCase();
     const list = q
       ? responses.filter((r) => {
-          const name = (r.submitterName ?? "").toLowerCase();
-          const email = (r.submitterEmail ?? "").toLowerCase();
-          return name.includes(q) || email.includes(q);
+          const { name, email } = resolveSubmitter(r, form);
+          const qName = (name ?? "").toLowerCase();
+          const qEmail = (email ?? "").toLowerCase();
+          return qName.includes(q) || qEmail.includes(q);
         })
       : responses;
     const sorted = [...list].sort((a, b) => {
@@ -96,7 +100,7 @@ export function ResponsesTable({
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [responses, query, sortField, sortDir]);
+  }, [responses, form, query, sortField, sortDir]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -168,6 +172,7 @@ export function ResponsesTable({
                 <ResponseRow
                   key={r.id}
                   response={r}
+                  form={form}
                   index={idx}
                   onClick={() => onRowClick(r.id)}
                 />
@@ -221,14 +226,19 @@ function SortHeader({
 
 function ResponseRow({
   response,
+  form,
   index,
   onClick,
 }: {
   response: FormResponse;
+  form?: Form;
   index: number;
   onClick: () => void;
 }) {
   const instances = countInstances(response);
+  const { name, email } = resolveSubmitter(response, form);
+  const displayName = name || "مقدم طلب غير محدد";
+  const initial = (name || "؟").trim().charAt(0).toLocaleUpperCase("ar");
   return (
     <motion.tr
       initial={{ opacity: 0, y: 8 }}
@@ -244,20 +254,17 @@ function ResponseRow({
       <TableCell className="px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gold/10 text-gold-dark text-xs font-semibold">
-            {(response.submitterName || "؟")
-              .trim()
-              .charAt(0)
-              .toLocaleUpperCase("ar")}
+            {initial}
           </div>
           <div className="min-w-0">
             <div className="text-sm font-medium text-foreground truncate">
-              {response.submitterName || "مقدم طلب غير محدد"}
+              {displayName}
             </div>
-            {response.submitterEmail && (
+            {email && (
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
                 <Mail className="size-3" />
                 <span className="truncate" dir="ltr">
-                  {response.submitterEmail}
+                  {email}
                 </span>
               </div>
             )}

@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import {
   Tooltip,
   TooltipTrigger,
@@ -34,12 +33,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  useCreateQuestion,
-  useUpdateSection,
-  useDeleteSection,
-} from "@/features/form-builder/hooks/useFormBuilder";
 import { useAdjustableState } from "@/features/form-builder/hooks/useAdjustableState";
+import { useFormDraft } from "@/features/form-builder/context/FormBuilderDraftContext";
 import { QuestionEditor } from "./QuestionEditor";
 import { RepeatableSectionSettings } from "./RepeatableSectionSettings";
 import { motionTokens } from "@/styles/design-tokens";
@@ -48,24 +43,12 @@ import { cn } from "@/lib/utils";
 import type { Section } from "@/shared/types";
 
 interface SectionCardProps {
-  formId: string;
   section: Section;
   index: number;
   isDragActive?: boolean;
 }
 
-/**
- * SectionCard — a dnd-kit sortable card representing one section.
- *
- * Header: drag handle, inline-editable title, "repeatable" Switch, delete
- * (with hover confirmation). When `isRepeatable` is true, smoothly expands the
- * `RepeatableSectionSettings` (min/max + repeatLabel).
- *
- * Body: list of `QuestionEditor`s (each sortable within the section) plus an
- * "إضافة سؤال" button at the bottom with the `animate-attention-pulse` class.
- */
 export function SectionCard({
-  formId,
   section,
   index,
   isDragActive = false,
@@ -79,9 +62,7 @@ export function SectionCard({
     isDragging,
   } = useSortable({ id: section.id });
 
-  const updateSection = useUpdateSection(formId);
-  const deleteSection = useDeleteSection(formId);
-  const createQuestion = useCreateQuestion(formId);
+  const { patchSection, deleteSection, addQuestion } = useFormDraft();
 
   const [title, setTitle] = useAdjustableState(section.title);
   const [collapsed, setCollapsed] = useState(false);
@@ -100,43 +81,18 @@ export function SectionCard({
       return;
     }
     if (trimmed !== section.title) {
-      updateSection.mutate({ sectionId: section.id, patch: { title: trimmed } });
+      patchSection(section.id, { title: trimmed });
     }
   };
 
   const handleRepeatableToggle = (checked: boolean) => {
-    updateSection.mutate({
-      sectionId: section.id,
-      patch: { isRepeatable: checked },
-    });
+    patchSection(section.id, { isRepeatable: checked });
   };
 
   const handleRepeatableChange = (
     patch: Partial<Pick<Section, "minRepeat" | "maxRepeat" | "repeatLabel">>
   ) => {
-    updateSection.mutate({ sectionId: section.id, patch });
-  };
-
-  const handleAddQuestion = () => {
-    createQuestion.mutate(
-      {
-        sectionId: section.id,
-        data: {
-          title: "سؤال جديد",
-          type: "short_text",
-          required: false,
-        },
-      },
-      {
-        onError: (e) => toast.error(e.message || "تعذّر إضافة السؤال"),
-      }
-    );
-  };
-
-  const handleDelete = () => {
-    deleteSection.mutate(section.id, {
-      onError: (e) => toast.error(e.message || "تعذّر حذف القسم"),
-    });
+    patchSection(section.id, patch);
   };
 
   const questionIds = section.questions.map((q) => q.id);
@@ -158,7 +114,6 @@ export function SectionCard({
         section.isRepeatable && "border-gold/30"
       )}
     >
-      {/* Header */}
       <div className="flex items-center gap-2 p-4 border-b border-border bg-muted/20">
         <button
           type="button"
@@ -261,25 +216,22 @@ export function SectionCard({
               </AlertDialogTitle>
               <AlertDialogDescription>
                 سيتم حذف القسم «{section.title}» وجميع أسئلته
-                ({section.questions.length} سؤال) نهائياً. لا يمكن التراجع عن هذا
-                الإجراء.
+                ({section.questions.length} سؤال) من المسودة. اضغط حفظ لتثبيت الحذف.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>إلغاء</AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleDelete}
-                disabled={deleteSection.isPending}
+                onClick={() => deleteSection(section.id)}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {deleteSection.isPending ? "جارٍ الحذف..." : "حذف"}
+                حذف
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
 
-      {/* Repeatable settings (animated) */}
       <RepeatableSectionSettings
         isRepeatable={section.isRepeatable}
         minRepeat={section.minRepeat}
@@ -288,7 +240,6 @@ export function SectionCard({
         onChange={handleRepeatableChange}
       />
 
-      {/* Body — questions */}
       {!collapsed && (
         <div className="p-4 pt-3">
           {section.questions.length === 0 ? (
@@ -317,7 +268,6 @@ export function SectionCard({
                 {section.questions.map((q, i) => (
                   <QuestionEditor
                     key={q.id}
-                    formId={formId}
                     question={q}
                     index={i}
                     isDragActive={isDragActive}
@@ -331,8 +281,7 @@ export function SectionCard({
             <Button
               variant="outline"
               size="sm"
-              onClick={handleAddQuestion}
-              disabled={createQuestion.isPending}
+              onClick={() => addQuestion(section.id)}
               className="w-full gap-2 border-dashed border-2 text-gold-dark hover:bg-gold/5 hover:border-gold animate-attention-pulse"
             >
               <Plus className="size-4" />

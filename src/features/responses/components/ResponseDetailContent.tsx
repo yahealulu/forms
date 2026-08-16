@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { AnswerDisplay, CompletionBar } from "./AnswerDisplay";
+import { resolveSubmitter } from "../utils/resolveSubmitter";
 
 /**
  * Shared body that renders a FormResponse against the originating Form's
@@ -50,6 +51,11 @@ export function ResponseDetailContent({
         minute: "2-digit",
       });
 
+  const { name: submitterName, email: submitterEmail } = resolveSubmitter(
+    response,
+    form
+  );
+
   return (
     <div className={cn("flex flex-col gap-5", className)}>
       {/* Submitter / metadata card */}
@@ -62,16 +68,16 @@ export function ResponseDetailContent({
               </div>
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-foreground truncate">
-                  {response.submitterName || "مقدم طلب غير محدد"}
+                  {submitterName || "مقدم طلب غير محدد"}
                 </h3>
-                {response.submitterEmail && (
+                {submitterEmail && (
                   <a
-                    href={`mailto:${response.submitterEmail}`}
+                    href={`mailto:${submitterEmail}`}
                     className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-gold-dark transition-colors mt-0.5"
                     dir="ltr"
                   >
                     <Mail className="size-3" />
-                    {response.submitterEmail}
+                    {submitterEmail}
                   </a>
                 )}
                 <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground mt-1.5">

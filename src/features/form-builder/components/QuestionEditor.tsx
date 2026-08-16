@@ -46,11 +46,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  useUpdateQuestion,
-  useDeleteQuestion,
-} from "@/features/form-builder/hooks/useFormBuilder";
 import { useAdjustableState } from "@/features/form-builder/hooks/useAdjustableState";
+import { useFormDraft } from "@/features/form-builder/context/FormBuilderDraftContext";
 import { OptionsManager } from "./OptionsManager";
 import { questionTypeMeta, questionTypeOrder } from "./question-type-meta";
 import { motionTokens } from "@/styles/design-tokens";
@@ -59,7 +56,6 @@ import { cn } from "@/lib/utils";
 import type { Question, QuestionType } from "@/shared/types";
 
 interface QuestionEditorProps {
-  formId: string;
   question: Question;
   index: number;
   isDragActive?: boolean;
@@ -73,7 +69,6 @@ interface QuestionEditorProps {
  * (file_upload / rating / number), and a hover-confirmation delete button.
  */
 export function QuestionEditor({
-  formId,
   question,
   index,
   isDragActive = false,
@@ -87,8 +82,7 @@ export function QuestionEditor({
     isDragging,
   } = useSortable({ id: question.id });
 
-  const updateQuestion = useUpdateQuestion(formId);
-  const deleteQuestion = useDeleteQuestion(formId);
+  const { patchQuestion, deleteQuestion } = useFormDraft();
 
   const style: React.CSSProperties = {
     transform: isDragging ? undefined : CSS.Transform.toString(transform),
@@ -111,20 +105,17 @@ export function QuestionEditor({
       return;
     }
     if (trimmed !== question.title) {
-      updateQuestion.mutate({ questionId: question.id, patch: { title: trimmed } });
+      patchQuestion(question.id, { title: trimmed });
     }
   };
 
   const handleTypeChange = (next: QuestionType) => {
     if (next === question.type) return;
-    updateQuestion.mutate({ questionId: question.id, patch: { type: next } });
+    patchQuestion(question.id, { type: next });
   };
 
   const handleRequiredToggle = (checked: boolean) => {
-    updateQuestion.mutate({
-      questionId: question.id,
-      patch: { required: checked },
-    });
+    patchQuestion(question.id, { required: checked });
   };
 
   return (
@@ -250,7 +241,6 @@ export function QuestionEditor({
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[440px] p-4">
                   <OptionsManager
-                    formId={formId}
                     questionId={question.id}
                     options={question.options}
                   />
@@ -261,7 +251,6 @@ export function QuestionEditor({
             {/* Type-specific config */}
             {question.type === "file_upload" && (
               <FileUploadConfig
-                formId={formId}
                 question={question}
                 open={showConfig}
                 onOpenChange={setShowConfig}
@@ -269,7 +258,6 @@ export function QuestionEditor({
             )}
             {question.type === "rating" && (
               <RatingConfig
-                formId={formId}
                 question={question}
                 open={showConfig}
                 onOpenChange={setShowConfig}
@@ -277,7 +265,6 @@ export function QuestionEditor({
             )}
             {question.type === "number" && (
               <NumberConfig
-                formId={formId}
                 question={question}
                 open={showConfig}
                 onOpenChange={setShowConfig}
@@ -331,12 +318,7 @@ export function QuestionEditor({
                 <AlertDialogFooter>
                   <AlertDialogCancel>إلغاء</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() =>
-                      deleteQuestion.mutate(question.id, {
-                        onError: (e) =>
-                          toast.error(e.message || "تعذّر حذف السؤال"),
-                      })
-                    }
+                    onClick={() => deleteQuestion(question.id)}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
                     حذف
@@ -354,14 +336,13 @@ export function QuestionEditor({
 // ── Type-specific config panels ──
 
 interface ConfigPanelProps {
-  formId: string;
   question: Question;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }
 
-function FileUploadConfig({ formId, question, open }: ConfigPanelProps) {
-  const updateQuestion = useUpdateQuestion(formId);
+function FileUploadConfig({ question, open }: ConfigPanelProps) {
+  const { patchQuestion } = useFormDraft();
   const [exts, setExts] = useAdjustableState(
     (question.allowedExtensions ?? []).join(", ")
   );
@@ -380,12 +361,9 @@ function FileUploadConfig({ formId, question, open }: ConfigPanelProps) {
         return cleaned ? `.${cleaned}` : "";
       })
       .filter(Boolean);
-    updateQuestion.mutate({
-      questionId: question.id,
-      patch: {
-        allowedExtensions: list,
-        maxFileSizeMB: Number(maxSize) || 5,
-      },
+    patchQuestion(question.id, {
+      allowedExtensions: list,
+      maxFileSizeMB: Number(maxSize) || 5,
     });
   };
 
@@ -431,8 +409,8 @@ function FileUploadConfig({ formId, question, open }: ConfigPanelProps) {
   );
 }
 
-function RatingConfig({ formId, question, open }: ConfigPanelProps) {
-  const updateQuestion = useUpdateQuestion(formId);
+function RatingConfig({ question, open }: ConfigPanelProps) {
+  const { patchQuestion } = useFormDraft();
   const [maxRating, setMaxRating] = useAdjustableState<string>(
     question.maxRating?.toString() ?? "5"
   );
@@ -441,9 +419,8 @@ function RatingConfig({ formId, question, open }: ConfigPanelProps) {
 
   const commit = () => {
     const v = Number(maxRating);
-    updateQuestion.mutate({
-      questionId: question.id,
-      patch: { maxRating: Number.isFinite(v) && v > 0 ? Math.min(10, Math.max(1, Math.floor(v))) : 5 },
+    patchQuestion(question.id, {
+      maxRating: Number.isFinite(v) && v > 0 ? Math.min(10, Math.max(1, Math.floor(v))) : 5,
     });
   };
 
@@ -483,8 +460,8 @@ function RatingConfig({ formId, question, open }: ConfigPanelProps) {
   );
 }
 
-function NumberConfig({ formId, question, open }: ConfigPanelProps) {
-  const updateQuestion = useUpdateQuestion(formId);
+function NumberConfig({ question, open }: ConfigPanelProps) {
+  const { patchQuestion } = useFormDraft();
   const [min, setMin] = useAdjustableState<string>(question.min?.toString() ?? "");
   const [max, setMax] = useAdjustableState<string>(question.max?.toString() ?? "");
 
@@ -493,12 +470,9 @@ function NumberConfig({ formId, question, open }: ConfigPanelProps) {
   const commit = () => {
     const minNum = min.trim() === "" ? undefined : Number(min);
     const maxNum = max.trim() === "" ? undefined : Number(max);
-    updateQuestion.mutate({
-      questionId: question.id,
-      patch: {
-        min: minNum,
-        max: maxNum,
-      },
+    patchQuestion(question.id, {
+      min: minNum,
+      max: maxNum,
     });
   };
 

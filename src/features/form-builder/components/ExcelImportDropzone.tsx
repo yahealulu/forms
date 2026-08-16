@@ -4,7 +4,6 @@ import { useCallback, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
 import { useExcelParser } from "@/features/form-builder/hooks/useExcelParser";
-import { useImportExcelOptions } from "@/features/form-builder/hooks/useFormBuilder";
 import { ExcelColumnPickerModal } from "./ExcelColumnPickerModal";
 import { motionTokens } from "@/styles/design-tokens";
 import { toast } from "sonner";
@@ -14,8 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 interface ExcelImportDropzoneProps {
-  formId: string;
-  questionId: string;
+  onImport: (values: string[]) => void;
 }
 
 /**
@@ -25,7 +23,7 @@ interface ExcelImportDropzoneProps {
  * After parse: preview + toggle «الصف الأول خيار وليس عنواناً».
  * One column → confirm import. Multiple columns → picker modal.
  */
-export function ExcelImportDropzone({ formId, questionId }: ExcelImportDropzoneProps) {
+export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
   const {
     parse,
     columns,
@@ -36,7 +34,6 @@ export function ExcelImportDropzone({ formId, questionId }: ExcelImportDropzoneP
     hasFile,
     reset,
   } = useExcelParser();
-  const importOptions = useImportExcelOptions(formId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -94,23 +91,13 @@ export function ExcelImportDropzone({ formId, questionId }: ExcelImportDropzoneP
   );
 
   const importColumn = (values: string[], label?: string) => {
-    importOptions.mutate(
-      { questionId, values },
-      {
-        onSuccess: (res) => {
-          const count = res?.data?.length ?? values.length;
-          toast.success(
-            label
-              ? `تم استيراد ${count} خيار من «${label}»`
-              : `تم استيراد ${count} خيار بنجاح`
-          );
-          reset();
-        },
-        onError: (err) => {
-          toast.error(err.message || "تعذّر استيراد الخيارات");
-        },
-      }
+    onImport(values);
+    toast.success(
+      label
+        ? `تمت إضافة ${values.length} خيار من «${label}» — اضغط حفظ`
+        : `تمت إضافة ${values.length} خيار — اضغط حفظ`
     );
+    reset();
   };
 
   const handleConfirmSingle = () => {
@@ -123,7 +110,7 @@ export function ExcelImportDropzone({ formId, questionId }: ExcelImportDropzoneP
     importColumn(column.values, column.columnLabel);
   };
 
-  const isBusy = isParsing || importOptions.isPending;
+  const isBusy = isParsing;
   const singleColumn = hasFile && columns.length === 1;
 
   return (

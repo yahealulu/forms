@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Star, FileText, Paperclip, CalendarDays, Hash } from "lucide-react";
+import { Star, FileText, CalendarDays, Hash } from "lucide-react";
 import type { AnswerValue, Question } from "@/shared/types";
 import { sanitizeText } from "@/shared/lib/security";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { FileAnswerGallery } from "./FileAnswerGallery";
 
 /**
  * Renders a single answer value according to the question type.
@@ -133,20 +134,7 @@ export function AnswerDisplay({
         ? (value as { fileId: string; fileName: string }[])
         : [];
       if (files.length === 0) return <EmptyAnswer />;
-      return (
-        <div className="flex flex-wrap gap-1.5">
-          {files.map((f, i) => (
-            <Badge
-              key={f.fileId ?? `${f.fileName}-${i}`}
-              variant="outline"
-              className="bg-muted/40 text-foreground gap-1.5"
-            >
-              <Paperclip className="size-3 text-gold-dark" />
-              <span className="max-w-[200px] truncate">{sanitizeText(f.fileName)}</span>
-            </Badge>
-          ))}
-        </div>
-      );
+      return <FileAnswerGallery files={files} />;
     }
 
     default: {

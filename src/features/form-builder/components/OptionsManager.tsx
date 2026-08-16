@@ -7,19 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  useAddOption,
-  useUpdateOption,
-  useDeleteOption,
-} from "@/features/form-builder/hooks/useFormBuilder";
 import { ExcelImportDropzone } from "./ExcelImportDropzone";
+import { useFormDraft } from "@/features/form-builder/context/FormBuilderDraftContext";
 import { motionTokens } from "@/styles/design-tokens";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Option } from "@/shared/types";
 
 interface OptionsManagerProps {
-  formId: string;
   questionId: string;
   options: Option[];
 }
@@ -33,11 +28,9 @@ interface OptionsManagerProps {
  * - When `useImportExcelOptions` succeeds, options animate in one-by-one via
  *   staggered fade + slide-up (Framer Motion `staggerChildren`).
  */
-export function OptionsManager({ formId, questionId, options }: OptionsManagerProps) {
+export function OptionsManager({ questionId, options }: OptionsManagerProps) {
   const [newLabel, setNewLabel] = useState("");
-  const addOption = useAddOption(formId);
-  const updateOption = useUpdateOption(formId);
-  const deleteOption = useDeleteOption(formId);
+  const { addOption, updateOption, deleteOption, importOptions } = useFormDraft();
 
   const handleAdd = () => {
     const trimmed = newLabel.trim();
@@ -45,15 +38,8 @@ export function OptionsManager({ formId, questionId, options }: OptionsManagerPr
       toast.error("يرجى إدخال نص الخيار");
       return;
     }
-    addOption.mutate(
-      { questionId, label: trimmed },
-      {
-        onSuccess: () => {
-          setNewLabel("");
-        },
-        onError: (err) => toast.error(err.message || "تعذّر إضافة الخيار"),
-      }
-    );
+    addOption(questionId, trimmed);
+    setNewLabel("");
   };
 
   return (
@@ -90,23 +76,10 @@ export function OptionsManager({ formId, questionId, options }: OptionsManagerPr
                     key={opt.id}
                     option={opt}
                     questionId={questionId}
-                    onUpdate={(label) =>
-                      updateOption.mutate(
-                        { questionId, optionId: opt.id, label },
-                        { onError: (e) => toast.error(e.message || "تعذّر تحديث الخيار") }
-                      )
-                    }
-                    onDelete={() =>
-                      deleteOption.mutate(
-                        { questionId, optionId: opt.id },
-                        {
-                          onError: (e) =>
-                            toast.error(e.message || "تعذّر حذف الخيار"),
-                        }
-                      )
-                    }
-                    saving={updateOption.isPending}
-                    deleting={deleteOption.isPending}
+                    onUpdate={(label) => updateOption(questionId, opt.id, label)}
+                    onDelete={() => deleteOption(questionId, opt.id)}
+                    saving={false}
+                    deleting={false}
                   />
                 ))}
               </AnimatePresence>
@@ -127,13 +100,12 @@ export function OptionsManager({ formId, questionId, options }: OptionsManagerPr
           }}
           placeholder="نص الخيار الجديد..."
           className="flex-1 h-9"
-          disabled={addOption.isPending}
         />
         <Button
           type="button"
           size="sm"
           onClick={handleAdd}
-          disabled={addOption.isPending || !newLabel.trim()}
+          disabled={!newLabel.trim()}
           className="gap-1.5 shrink-0"
         >
           <Plus className="size-3.5" />
@@ -142,7 +114,11 @@ export function OptionsManager({ formId, questionId, options }: OptionsManagerPr
       </div>
 
       <div className="pt-2 border-t border-border">
-        <ExcelImportDropzone formId={formId} questionId={questionId} />
+        <ExcelImportDropzone
+          onImport={(values) => {
+            importOptions(questionId, values);
+          }}
+        />
       </div>
     </div>
   );

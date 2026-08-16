@@ -14,9 +14,12 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
+      "img-src 'self' data: blob: https: http://localhost:3001",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      "connect-src 'self' http://localhost:3001",
+      "frame-src 'self' blob:",
+      "child-src 'self' blob:",
+      "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
     ].join("; "),
@@ -36,7 +39,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/(.*)",
+        source: "/((?!api/files/).*)",
         headers: securityHeaders,
       },
     ];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DndContext,
@@ -32,15 +32,16 @@ import {
   Save,
   Wand2,
 } from "lucide-react";
-import { useForm, useUpdateForm } from "@/features/forms-management/hooks/useForms";
+import { useForm, useSaveFormTree, useUpdateForm } from "@/features/forms-management/hooks/useForms";
 import {
-  useCreateSection,
-  useReorderSections,
-  useReorderQuestions,
   reorderSectionsInForm,
   reorderQuestionsInForm,
 } from "@/features/form-builder/hooks/useFormBuilder";
-import { useAdjustableState } from "@/features/form-builder/hooks/useAdjustableState";
+import {
+  FormBuilderDraftProvider,
+  createEmptySection,
+  toFormTreePayload,
+} from "@/features/form-builder/context/FormBuilderDraftContext";
 import { useUIStore } from "@/stores/useUIStore";
 import { SectionCard } from "./SectionCard";
 import { LivePreviewPanel } from "./LivePreviewPanel";
@@ -94,23 +95,40 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
   const setView = useUIStore((s) => s.setView);
   const { data: form, isLoading, isError, error } = useForm(formId);
   const updateForm = useUpdateForm(formId);
-  const createSection = useCreateSection();
-  const reorderSections = useReorderSections(formId);
-  const reorderQuestions = useReorderQuestions(formId);
+  const saveTree = useSaveFormTree(formId);
 
-  const [title, setTitle] = useAdjustableState(form?.title ?? "");
+  const [draft, setDraft] = useState<Form | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [dragSnapshot, setDragSnapshot] = useState<Form | null>(null);
   const [previewOpen, setPreviewOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [displayForm, setDisplayForm] = useState<Form | null>(null);
 
   useEffect(() => {
-    if (form && !activeId) {
-      setDisplayForm(form);
+    if (form && !dirty && !activeId) {
+      setDraft(form);
     }
-  }, [form, activeId]);
+  }, [form, dirty, activeId]);
 
-  const workingForm = displayForm ?? form;
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  const setDraftDirty = useCallback<Dispatch<SetStateAction<Form | null>>>(
+    (update) => {
+      setDirty(true);
+      setDraft(update);
+    },
+    []
+  );
+
+  const workingForm = draft ?? form;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 2 } }),
@@ -148,9 +166,9 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       setActiveId(String(event.active.id));
-      if (form) setDisplayForm(form);
+      setDragSnapshot(draft);
     },
-    [form]
+    [draft]
   );
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
@@ -160,7 +178,7 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
     const activeIdStr = String(active.id);
     const overIdStr = String(over.id);
 
-    setDisplayForm((prev) => {
+    setDraft((prev) => {
       if (!prev) return prev;
 
       const sIds = prev.sections.map((s) => s.id);
@@ -193,71 +211,65 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
     (event: DragEndEvent) => {
       const { active, over } = event;
       setActiveId(null);
+      setDragSnapshot(null);
 
-      if (!over || active.id === over.id || !displayForm || !form) {
-        setDisplayForm(null);
+      if (!over || active.id === over.id) {
+        if (dragSnapshot) setDraft(dragSnapshot);
         return;
       }
-
-      const newSectionIds = displayForm.sections.map((s) => s.id);
-      const oldSectionIds = form.sections.map((s) => s.id);
-      if (JSON.stringify(newSectionIds) !== JSON.stringify(oldSectionIds)) {
-        reorderSections.mutate(newSectionIds, {
-          onError: (e) => toast.error(e.message || "تعذّر تحديث الترتيب"),
-        });
-      }
-
-      for (const sec of displayForm.sections) {
-        const orig = form.sections.find((s) => s.id === sec.id);
-        if (!orig) continue;
-        const newQIds = sec.questions.map((q) => q.id);
-        const oldQIds = orig.questions.map((q) => q.id);
-        if (JSON.stringify(newQIds) !== JSON.stringify(oldQIds)) {
-          reorderQuestions.mutate(
-            { sectionId: sec.id, orderedIds: newQIds },
-            {
-              onError: (e) =>
-                toast.error(e.message || "تعذّر تحديث ترتيب الأسئلة"),
-            }
-          );
-        }
-      }
-
-      setDisplayForm(null);
+      setDirty(true);
     },
-    [displayForm, form, reorderSections, reorderQuestions]
+    [dragSnapshot]
   );
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);
-    setDisplayForm(null);
-  }, []);
+    if (dragSnapshot) setDraft(dragSnapshot);
+    setDragSnapshot(null);
+  }, [dragSnapshot]);
 
   const commitTitle = () => {
-    const trimmed = title.trim();
+    if (!draft) return;
+    const trimmed = draft.title.trim();
     if (!trimmed) {
-      setTitle(form?.title ?? "");
       toast.error("لا يمكن أن يكون عنوان النموذج فارغاً");
+      setDraftDirty((prev) =>
+        prev ? { ...prev, title: form?.title ?? prev.title } : prev
+      );
       return;
     }
-    if (trimmed !== form?.title) {
-      updateForm.mutate({ title: trimmed });
+    if (trimmed !== draft.title) {
+      setDraftDirty((prev) => (prev ? { ...prev, title: trimmed } : prev));
     }
   };
 
   const handleAddSection = () => {
-    createSection.mutate(
-      {
-        formId,
-        data: {
-          title: `قسم ${((form?.sections.length ?? 0) + 1).toString()}`,
-          isRepeatable: false,
-        },
+    setDraftDirty((prev) => {
+      if (!prev) return prev;
+      const section = createEmptySection(formId, prev.sections.length);
+      return { ...prev, sections: [...prev.sections, section] };
+    });
+  };
+
+  const persistDraft = (onSaved?: (saved: Form) => void) => {
+    if (!draft) return;
+    const trimmed = draft.title.trim();
+    if (!trimmed) {
+      toast.error("لا يمكن أن يكون عنوان النموذج فارغاً");
+      return;
+    }
+    saveTree.mutate(toFormTreePayload({ ...draft, title: trimmed }), {
+      onSuccess: (saved) => {
+        setDraft(saved);
+        setDirty(false);
+        onSaved?.(saved);
       },
-      {
-        onError: (e) => toast.error(e.message || "تعذّر إضافة القسم"),
-      }
-    );
+      onError: (e) => toast.error(e.message || "تعذّر حفظ النموذج"),
+    });
+  };
+
+  const handleSave = () => {
+    persistDraft(() => toast.success("تم حفظ النموذج"));
   };
 
   const handleCopyPublicLink = async () => {
@@ -269,17 +281,7 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
     }
   };
 
-  const handlePublish = () => {
-    if (!form) return;
-    if (form.sections.length === 0) {
-      toast.error("لا يمكن نشر نموذج بدون أقسام");
-      return;
-    }
-    const hasEmptySection = form.sections.some((s) => s.questions.length === 0);
-    if (hasEmptySection) {
-      toast.error("لا يمكن نشر نموذج يحتوي على أقسام فارغة");
-      return;
-    }
+  const publishForm = () => {
     updateForm.mutate(
       { status: "published" },
       {
@@ -296,6 +298,25 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
         onError: (e) => toast.error(e.message || "تعذّر نشر النموذج"),
       }
     );
+  };
+
+  const handlePublish = () => {
+    const source = draft ?? form;
+    if (!source) return;
+    if (source.sections.length === 0) {
+      toast.error("لا يمكن نشر نموذج بدون أقسام");
+      return;
+    }
+    const hasEmptySection = source.sections.some((s) => s.questions.length === 0);
+    if (hasEmptySection) {
+      toast.error("لا يمكن نشر نموذج يحتوي على أقسام فارغة");
+      return;
+    }
+    if (dirty) {
+      persistDraft(() => publishForm());
+      return;
+    }
+    publishForm();
   };
 
   if (isLoading) {
@@ -324,9 +345,21 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
     );
   }
 
-  const status = statusBadge[form.status];
+  if (!workingForm) {
+    return (
+      <BrandLoader variant="page" label="جارٍ تحميل محرر النموذج..." />
+    );
+  }
+
+  const status = statusBadge[workingForm.status];
+  const isSaving = saveTree.isPending || updateForm.isPending;
 
   return (
+    <FormBuilderDraftProvider
+      formId={formId}
+      draft={workingForm}
+      setDraft={setDraftDirty}
+    >
     <TooltipProvider delayDuration={200}>
       <DndContext
         sensors={sensors}
@@ -341,7 +374,7 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
           <PalettePanel
             className="hidden lg:flex"
             onAddSection={handleAddSection}
-            addingSection={createSection.isPending}
+            addingSection={false}
           />
 
           {/* Mobile palette trigger (in toolbar) */}
@@ -375,8 +408,12 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                 <div className="h-6 w-px bg-border shrink-0" />
 
                 <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  value={workingForm.title}
+                  onChange={(e) =>
+                    setDraftDirty((prev) =>
+                      prev ? { ...prev, title: e.target.value } : prev
+                    )
+                  }
                   onBlur={commitTitle}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -429,25 +466,45 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
+                        variant={dirty ? "default" : "outline"}
                         size="sm"
-                        onClick={handlePublish}
-                        disabled={updateForm.isPending || form.status === "published"}
-                        className="gap-1.5 bg-gold-dark text-white hover:bg-gold-dark/90"
+                        onClick={handleSave}
+                        disabled={!dirty || isSaving}
+                        className="gap-1.5"
                       >
-                        <Rocket className="size-4" />
+                        <Save className="size-4" />
                         <span className="hidden sm:inline">
-                          {form.status === "published" ? "منشور" : "حفظ ونشر"}
+                          {saveTree.isPending ? "جارٍ الحفظ..." : dirty ? "حفظ" : "محفوظ"}
                         </span>
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      {form.status === "published"
-                        ? "النموذج منشور بالفعل"
-                        : "نشر النموذج لتلقي الاستجابات"}
+                      حفظ كل التعديلات دفعة واحدة
                     </TooltipContent>
                   </Tooltip>
 
-                  {form.status === "published" && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        onClick={handlePublish}
+                        disabled={isSaving || workingForm.status === "published"}
+                        className="gap-1.5 bg-gold-dark text-white hover:bg-gold-dark/90"
+                      >
+                        <Rocket className="size-4" />
+                        <span className="hidden sm:inline">
+                          {workingForm.status === "published" ? "منشور" : "حفظ ونشر"}
+                        </span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {workingForm.status === "published"
+                        ? "النموذج منشور بالفعل"
+                        : "حفظ ثم نشر النموذج لتلقي الاستجابات"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  {workingForm.status === "published" && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -482,19 +539,19 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-muted-foreground">
-                          {form.entityName}
+                          {workingForm.entityName}
                         </span>
                         <Badge variant="outline" className="text-[11px] font-normal gap-1">
                           <ListChecks className="size-3" />
-                          {form.sections.length} أقسام
+                          {workingForm.sections.length} أقسام
                         </Badge>
                         <Badge variant="outline" className="text-[11px] font-normal gap-1">
-                          {form.sections.reduce((acc, s) => acc + s.questions.length, 0)} سؤال
+                          {workingForm.sections.reduce((acc, s) => acc + s.questions.length, 0)} سؤال
                         </Badge>
                       </div>
-                      {form.description && (
+                      {workingForm.description && (
                         <p className="text-sm text-muted-foreground mt-1 leading-relaxed line-clamp-2">
-                          {form.description}
+                          {workingForm.description}
                         </p>
                       )}
                     </div>
@@ -524,7 +581,6 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                         {workingForm.sections.map((section, idx) => (
                           <SectionCard
                             key={section.id}
-                            formId={formId}
                             section={section}
                             index={idx}
                             isDragActive={!!activeId}
@@ -540,7 +596,6 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
                   <Button
                     variant="outline"
                     onClick={handleAddSection}
-                    disabled={createSection.isPending}
                     className="w-full gap-2 border-dashed border-2 text-gold-dark hover:bg-gold/5 hover:border-gold"
                   >
                     <Plus className="size-4" />
@@ -588,11 +643,12 @@ export function FormBuilderView({ formId }: FormBuilderViewProps) {
               handleAddSection();
               setPaletteOpen(false);
             }}
-            addingSection={createSection.isPending}
+            addingSection={false}
           />
         </SheetContent>
       </Sheet>
     </TooltipProvider>
+    </FormBuilderDraftProvider>
   );
 }
 
@@ -681,11 +737,11 @@ function PaletteBody({
       <div className="mt-4 rounded-lg bg-gold/5 border border-gold/20 p-3">
         <div className="flex items-center gap-1.5 mb-1 text-gold-dark">
           <Save className="size-3.5" />
-          <span className="text-[11px] font-semibold">حفظ تلقائي</span>
+          <span className="text-[11px] font-semibold">حفظ يدوي</span>
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          تُحفظ التغييرات تلقائياً عند التعديل. استخدم زر «حفظ ونشر» لتفعيل النموذج
-          وتلقي الاستجابات.
+          التعديلات تبقى محلية حتى تضغط «حفظ». زر «حفظ ونشر» يحفظ ثم يفعّل النموذج
+          لتلقي الاستجابات.
         </p>
       </div>
     </div>

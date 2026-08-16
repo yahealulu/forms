@@ -101,3 +101,15 @@ export function useDeleteForm() {
     },
   });
 }
+
+export function useSaveFormTree(formId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) =>
+      api.put<FormResponse>(`/api/forms/${formId}/tree`, payload).then((r) => r.data),
+    onSuccess: (saved) => {
+      qc.setQueryData(formsKeys.detail(formId), saved);
+      qc.invalidateQueries({ queryKey: formsKeys.list() });
+    },
+  });
+}
