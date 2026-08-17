@@ -87,8 +87,11 @@ export function OptionsManager({ questionId }: OptionsManagerProps) {
 
       <div className="pt-2 border-t border-border">
         <ExcelImportDropzone
-          onImport={(values) => {
-            useBuilderStore.getState().importOptions(questionId, values);
+          onImport={(values) =>
+            useBuilderStore.getState().importOptions(questionId, values)
+          }
+          onClearImported={(ids) => {
+            useBuilderStore.getState().removeOptions(questionId, ids);
           }}
         />
       </div>

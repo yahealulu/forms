@@ -84,7 +84,8 @@ interface BuilderState {
   updateOption: (questionId: string, optionId: string, label: string) => void;
   deleteOption: (questionId: string, optionId: string) => DeletedOptionSnapshot | null;
   restoreOption: (snap: DeletedOptionSnapshot) => void;
-  importOptions: (questionId: string, labels: string[]) => void;
+  importOptions: (questionId: string, labels: string[]) => string[];
+  removeOptions: (questionId: string, optionIds: string[]) => void;
   toTreePayload: () => FormTreePayload | null;
   assembleForm: () => Form | null;
 }
@@ -574,7 +575,8 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       };
     }),
 
-  importOptions: (questionId, labels) =>
+  importOptions: (questionId, labels) => {
+    const createdIds: string[] = [];
     set((state) => {
       const question = state.questionsById[questionId];
       if (!question) return state;
@@ -582,8 +584,10 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
       for (const label of labels) {
         const trimmed = label.trim();
         if (!trimmed) continue;
+        const id = newEntityId();
+        createdIds.push(id);
         next.push({
-          id: newEntityId(),
+          id,
           label: trimmed,
           value: trimmed,
           order: next.length,
@@ -593,6 +597,27 @@ export const useBuilderStore = create<BuilderState>((set, get) => ({
         questionsById: {
           ...state.questionsById,
           [questionId]: { ...question, options: next },
+        },
+        dirty: true,
+      };
+    });
+    return createdIds;
+  },
+
+  removeOptions: (questionId, optionIds) =>
+    set((state) => {
+      const question = state.questionsById[questionId];
+      if (!question || optionIds.length === 0) return state;
+      const remove = new Set(optionIds);
+      return {
+        questionsById: {
+          ...state.questionsById,
+          [questionId]: {
+            ...question,
+            options: question.options
+              .filter((o) => !remove.has(o.id))
+              .map((o, order) => ({ ...o, order })),
+          },
         },
         dirty: true,
       };

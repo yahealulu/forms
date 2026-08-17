@@ -27,7 +27,6 @@ interface ExcelColumnPickerModalProps {
   treatFirstRowAsHeader?: boolean;
   onToggleHeader?: (firstRowIsOption: boolean) => void;
   onConfirm: (column: ExcelColumn) => void;
-  onCancel?: () => void;
 }
 
 /**
@@ -52,7 +51,6 @@ export function ExcelColumnPickerModal({
   treatFirstRowAsHeader = true,
   onToggleHeader,
   onConfirm,
-  onCancel,
 }: ExcelColumnPickerModalProps) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [shakingIdx, setShakingIdx] = useState<number | null>(null);
@@ -100,7 +98,6 @@ export function ExcelColumnPickerModal({
   };
 
   const handleCancel = () => {
-    onCancel?.();
     reset();
     handleOpenChange(false);
   };
@@ -109,21 +106,25 @@ export function ExcelColumnPickerModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="sm:max-w-[680px] p-0 overflow-hidden"
+        className={cn(
+          "flex flex-col gap-0 p-0 overflow-hidden",
+          "w-[calc(100%-1.5rem)] max-w-[680px]",
+          "max-h-[min(90dvh,640px)]"
+        )}
       >
-        <DialogHeader className="px-6 pt-6 pb-3">
-          <DialogTitle className="flex items-center gap-2">
-            <Layers className="size-5 text-gold-dark" aria-hidden="true" />
-            هذا الملف يحتوي على أكثر من مجموعة خيارات — اختر واحدة لهذا السؤال.
+        <DialogHeader className="shrink-0 px-4 sm:px-6 pt-5 pb-3">
+          <DialogTitle className="flex items-start gap-2 text-base sm:text-lg leading-snug">
+            <Layers className="size-5 shrink-0 mt-0.5 text-gold-dark" aria-hidden="true" />
+            <span>هذا الملف يحتوي على أكثر من مجموعة خيارات — اختر واحدة لهذا السؤال.</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm">
             تم اكتشاف {columns.length} مجموعات خيارات مستقلة في الملف. اختر
             المجموعة المناسبة لهذا السؤال فقط.
           </DialogDescription>
         </DialogHeader>
 
         {onToggleHeader && (
-          <div className="px-6 flex items-start gap-2.5">
+          <div className="shrink-0 px-4 sm:px-6 pb-3 flex items-start gap-2.5">
             <Switch
               id="picker-header-toggle"
               checked={!treatFirstRowAsHeader}
@@ -139,45 +140,47 @@ export function ExcelColumnPickerModal({
           </div>
         )}
 
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: {},
-            visible: { transition: { staggerChildren: motionTokens.stagger.cards } },
-          }}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-3 px-6 pb-2"
-        >
-          {columns.map((col, idx) => (
-            <ColumnCard
-              key={`${col.columnLabel}-${idx}`}
-              column={col}
-              index={idx}
-              selected={selectedIdx === idx}
-              shaking={shakingIdx === idx}
-              onClick={() => handleCardClick(idx)}
-            />
-          ))}
-        </motion.div>
+        <div className="min-h-0 flex-1 max-h-[min(50dvh,360px)] overflow-y-auto overscroll-contain px-4 sm:px-6 pb-3">
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: motionTokens.stagger.cards } },
+            }}
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+          >
+            {columns.map((col, idx) => (
+              <ColumnCard
+                key={`${col.columnLabel}-${idx}`}
+                column={col}
+                index={idx}
+                selected={selectedIdx === idx}
+                shaking={shakingIdx === idx}
+                onClick={() => handleCardClick(idx)}
+              />
+            ))}
+          </motion.div>
+        </div>
 
         <DialogFooter
-          className="px-6 py-4 border-t border-border bg-muted/30 flex-row items-center justify-between gap-3"
+          className="shrink-0 px-4 sm:px-6 py-3 border-t border-border bg-muted/30 flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3"
         >
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Sparkles className="size-3.5 text-gold-dark" />
+            <Sparkles className="size-3.5 shrink-0 text-gold-dark" />
             {selectedIdx === null
               ? "اختر بطاقة واحدة للمتابعة"
               : "تم الاختيار — يمكنك التأكيد الآن"}
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleCancel}>
+          <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={handleCancel} className="flex-1 sm:flex-none">
               إلغاء
             </Button>
             <Button
               onClick={handleConfirm}
               disabled={selectedIdx === null}
               className={cn(
-                "gap-2 transition-colors duration-300",
+                "flex-1 sm:flex-none gap-2 transition-colors duration-300",
                 selectedIdx !== null &&
                   "bg-gold-dark text-white hover:bg-gold-dark/90"
               )}
@@ -201,7 +204,7 @@ interface ColumnCardProps {
 }
 
 function ColumnCard({ column, selected, shaking, onClick }: ColumnCardProps) {
-  const preview = column.values.slice(0, 5);
+  const preview = column.values.slice(0, 3);
   const cardVariants = {
     hidden: { opacity: 0, y: 16 },
     visible: {
@@ -228,7 +231,7 @@ function ColumnCard({ column, selected, shaking, onClick }: ColumnCardProps) {
           : { duration: motionTokens.duration.fast, ease: motionTokens.ease.snappy }
       }
       className={cn(
-        "relative text-start p-4 rounded-2xl border-2 bg-card transition-all duration-200 cursor-pointer",
+        "relative text-start p-3 sm:p-4 rounded-2xl border-2 bg-card transition-all duration-200 cursor-pointer min-w-0",
         selected && "pe-12",
         "shadow-sm hover:shadow-md",
         selected

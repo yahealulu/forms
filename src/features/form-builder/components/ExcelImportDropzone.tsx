@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { FileSpreadsheet, Loader2, UploadCloud } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { FileSpreadsheet, Loader2, UploadCloud, X } from "lucide-react";
 import { useExcelParser } from "@/features/form-builder/hooks/useExcelParser";
 import { ExcelColumnPickerModal } from "./ExcelColumnPickerModal";
 import { motionTokens } from "@/styles/design-tokens";
@@ -13,17 +13,26 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
 interface ExcelImportDropzoneProps {
-  onImport: (values: string[]) => void;
+  onImport: (values: string[]) => string[];
+  onClearImported: (optionIds: string[]) => void;
+}
+
+interface AttachedFile {
+  name: string;
+  size: number;
 }
 
 /**
  * ExcelImportDropzone — dashed dropzone for Excel/CSV with a visible template
  * so users know the expected sheet shape before upload.
  *
- * After parse: preview + toggle «الصف الأول خيار وليس عنواناً».
- * One column → confirm import. Multiple columns → picker modal.
+ * After a file is attached, the dropzone is replaced by a file chip.
+ * Clearing the chip also removes options imported from that file.
  */
-export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
+export function ExcelImportDropzone({
+  onImport,
+  onClearImported,
+}: ExcelImportDropzoneProps) {
   const {
     parse,
     columns,
@@ -37,11 +46,18 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<AttachedFile | null>(null);
+  const [importedIds, setImportedIds] = useState<string[]>([]);
+  const [didImport, setDidImport] = useState(false);
 
   const ACCEPT = ".xlsx,.xls,.csv";
+  const showDropzone = !attachedFile && !isParsing;
 
   const handleFile = useCallback(
     async (file: File) => {
+      setAttachedFile({ name: file.name, size: file.size });
+      setDidImport(false);
+      setImportedIds([]);
       try {
         const detected = await parse(file);
         if (detected.length === 0) {
@@ -52,7 +68,7 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
           setPickerOpen(true);
         }
       } catch {
-        /* error state is shown via role=alert */
+        setAttachedFile(null);
       }
     },
     [parse]
@@ -91,7 +107,9 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
   );
 
   const importColumn = (values: string[], label?: string) => {
-    onImport(values);
+    const ids = onImport(values);
+    setImportedIds(ids);
+    setDidImport(true);
     toast.success(
       label
         ? `تمت إضافة ${values.length} خيار من «${label}» — اضغط حفظ`
@@ -106,78 +124,154 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
     importColumn(col.values, col.columnLabel);
   };
 
-  const handleConfirmColumn = (column: { columnLabel: string; values: string[] }) => {
+  const handleConfirmColumn = (column: {
+    columnLabel: string;
+    values: string[];
+  }) => {
     importColumn(column.values, column.columnLabel);
+  };
+
+  const clearAttachedFile = () => {
+    const hadImported = importedIds.length > 0;
+    if (hadImported) {
+      onClearImported(importedIds);
+    }
+    setAttachedFile(null);
+    setImportedIds([]);
+    setDidImport(false);
+    setPickerOpen(false);
+    reset();
+    toast.success(
+      hadImported ? "تم إزالة الملف والخيارات المستوردة منه" : "تم إزالة الملف"
+    );
   };
 
   const isBusy = isParsing;
   const singleColumn = hasFile && columns.length === 1;
+  const pendingMulti = hasFile && columns.length > 1 && !didImport;
 
   return (
-    <div className="w-full space-y-3">
-      <ExcelFormatGuide />
+    <div className="w-full space-y-3 min-w-0">
+      {showDropzone && <ExcelFormatGuide />}
 
-      <motion.div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onClick={() => !isBusy && inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        aria-label="رفع ملف Excel لاستيراد الخيارات"
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !isBusy) {
-            e.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
-        animate={{ scale: isDragOver ? 1.02 : 1 }}
-        transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.snappy }}
-        className={cn(
-          "relative w-full min-h-11 rounded-xl border-2 border-dashed px-4 py-5 text-center cursor-pointer transition-colors",
-          "flex flex-col items-center justify-center gap-2",
-          isDragOver
-            ? "border-gold bg-gold/5"
-            : "border-border bg-muted/30 hover:border-gold/40 hover:bg-muted/50",
-          isBusy && "pointer-events-none opacity-70"
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT}
+        onChange={handleInputChange}
+        className="sr-only"
+        aria-label="رفع ملف Excel"
+      />
+
+      <AnimatePresence mode="wait" initial={false}>
+        {showDropzone ? (
+          <motion.div
+            key="dropzone"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{
+              duration: motionTokens.duration.fast,
+              ease: motionTokens.ease.snappy,
+            }}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => !isBusy && inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            aria-label="رفع ملف Excel لاستيراد الخيارات"
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && !isBusy) {
+                e.preventDefault();
+                inputRef.current?.click();
+              }
+            }}
+            className={cn(
+              "relative w-full min-h-11 rounded-xl border-2 border-dashed px-4 py-5 text-center cursor-pointer transition-colors",
+              "flex flex-col items-center justify-center gap-2",
+              isDragOver
+                ? "border-gold bg-gold/5"
+                : "border-border bg-muted/30 hover:border-gold/40 hover:bg-muted/50",
+              isBusy && "pointer-events-none opacity-70"
+            )}
+          >
+            <motion.div
+              animate={{
+                y: isDragOver ? -2 : 0,
+                scale: isDragOver ? 1.08 : 1,
+              }}
+              transition={{
+                duration: motionTokens.duration.fast,
+                ease: motionTokens.ease.smooth,
+              }}
+              className={cn(
+                "flex size-10 items-center justify-center rounded-xl transition-colors",
+                isDragOver
+                  ? "bg-gold/15 text-gold-dark"
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {isDragOver ? (
+                <UploadCloud className="size-5" aria-hidden="true" />
+              ) : (
+                <FileSpreadsheet className="size-5" aria-hidden="true" />
+              )}
+            </motion.div>
+
+            <p className="text-xs text-muted-foreground leading-snug max-w-[260px]">
+              اسحب ملف Excel هنا أو اضغط للاختيار
+            </p>
+            <p className="text-[10px] text-muted-foreground/70">xlsx · xls · csv</p>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="file-chip"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{
+              duration: motionTokens.duration.fast,
+              ease: motionTokens.ease.snappy,
+            }}
+            className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 min-h-11 min-w-0"
+          >
+            {isBusy ? (
+              <Loader2
+                className="size-4 shrink-0 animate-spin text-gold-dark"
+                aria-hidden="true"
+              />
+            ) : (
+              <FileSpreadsheet
+                className="size-4 shrink-0 text-gold-dark"
+                aria-hidden="true"
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-foreground truncate" title={attachedFile?.name}>
+                {isBusy ? "جارٍ معالجة الملف..." : attachedFile?.name}
+              </p>
+              {attachedFile && !isBusy && (
+                <p className="text-[11px] text-muted-foreground">
+                  {formatFileSize(attachedFile.size)}
+                  {didImport ? " · تم الاستيراد" : ""}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-9 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={clearAttachedFile}
+              disabled={isBusy}
+              aria-label="إزالة الملف والخيارات المستوردة"
+            >
+              <X className="size-4" />
+            </Button>
+          </motion.div>
         )}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPT}
-          onChange={handleInputChange}
-          className="sr-only"
-          aria-label="رفع ملف Excel"
-        />
-
-        <motion.div
-          animate={{
-            y: isDragOver ? -2 : 0,
-            scale: isDragOver ? 1.08 : 1,
-          }}
-          transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.smooth }}
-          className={cn(
-            "flex size-10 items-center justify-center rounded-xl transition-colors",
-            isDragOver ? "bg-gold/15 text-gold-dark" : "bg-muted text-muted-foreground"
-          )}
-        >
-          {isBusy ? (
-            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-          ) : isDragOver ? (
-            <UploadCloud className="size-5" aria-hidden="true" />
-          ) : (
-            <FileSpreadsheet className="size-5" aria-hidden="true" />
-          )}
-        </motion.div>
-
-        <p className="text-xs text-muted-foreground leading-snug max-w-[260px]">
-          {isBusy
-            ? "جارٍ معالجة الملف..."
-            : "اسحب ملف Excel هنا أو اضغط للاختيار"}
-        </p>
-        <p className="text-[10px] text-muted-foreground/70">xlsx · xls · csv</p>
-      </motion.div>
+      </AnimatePresence>
 
       {error && (
         <p role="alert" className="text-xs text-destructive">
@@ -185,8 +279,8 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
         </p>
       )}
 
-      {hasFile && (
-        <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+      {hasFile && !didImport && (
+        <div className="rounded-xl border border-border bg-card p-3 space-y-3 min-w-0">
           <div className="flex items-start gap-2.5">
             <Switch
               id="excel-header-toggle"
@@ -215,7 +309,7 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
                 label={columns[0].columnLabel}
                 values={columns[0].values}
               />
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
@@ -225,41 +319,42 @@ export function ExcelImportDropzone({ onImport }: ExcelImportDropzoneProps) {
                 >
                   استيراد {columns[0].values.length} خيار
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={reset}
-                  disabled={isBusy}
-                >
-                  إلغاء
-                </Button>
               </div>
             </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              تم اكتشاف {columns.length} أعمدة — اختر عموداً واحداً من النافذة.
-            </p>
-          )}
+          ) : pendingMulti ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                تم اكتشاف {columns.length} أعمدة — اختر عموداً واحداً.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setPickerOpen(true)}
+              >
+                اختيار العمود
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
 
       <ExcelColumnPickerModal
         open={pickerOpen}
-        onOpenChange={(o) => {
-          setPickerOpen(o);
-          if (!o) {
-            reset();
-          }
-        }}
+        onOpenChange={setPickerOpen}
         columns={columns}
         treatFirstRowAsHeader={treatFirstRowAsHeader}
         onToggleHeader={(asOption) => setTreatFirstRowAsHeader(!asOption)}
         onConfirm={handleConfirmColumn}
-        onCancel={() => reset()}
       />
     </div>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} بايت`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} ك.ب`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} م.ب`;
 }
 
 function ExcelFormatGuide() {
@@ -303,12 +398,12 @@ function ExcelFormatGuide() {
 }
 
 function ImportPreview({ label, values }: { label: string; values: string[] }) {
-  const preview = values.slice(0, 5);
+  const preview = values.slice(0, 4);
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-foreground">{label}</p>
+    <div className="space-y-1.5 min-w-0">
+      <p className="text-xs font-medium text-foreground truncate">{label}</p>
       <p className="text-[11px] text-muted-foreground">{values.length} خيار سيُستورد</p>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-1 max-h-28 overflow-y-auto">
         {preview.map((val, i) => (
           <li
             key={`${val}-${i}`}
