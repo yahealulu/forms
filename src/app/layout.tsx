@@ -42,7 +42,7 @@ export default function RootLayout({
       >
         <Providers>{children}</Providers>
         <Toaster />
-        <SonnerToaster position="top-center" richColors />
+        <SonnerToaster />
       </body>
     </html>
   );
